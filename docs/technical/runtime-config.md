@@ -12,6 +12,12 @@
 - `HTTP_TIMEOUT_MS` - outbound API timeout.
 - `BOT_MODE` - `polling` or `webhook`.
 
+## BOT_MODE guidance
+
+- Use `polling` for local development and manual testing.
+- Use `webhook` for production deployments (including serverless platforms).
+- Keep a single active delivery mode per bot token (do not run polling while webhook is configured).
+
 ## Startup checks
 
 - Validate required envs at process start.

@@ -23,6 +23,29 @@ This repository is the edit target. API repository files are used as a reference
 - API request/response contracts should stay compatible with the API repository.
 - When implementation details are needed, read API files via: `../goals-tracker-api`.
 
+## Recommended MVP Stack
+
+- Runtime: Node.js (use an active LTS release).
+- Language: TypeScript.
+- Telegram framework: `grammY`.
+- API contracts typing: `openapi-typescript` generated from `../goals-tracker-api/swagger.yaml`.
+- Typed HTTP client: `openapi-fetch` (on top of native Node.js `fetch`).
+- Validation/config: `zod` for env/startup checks.
+- Logging: structured logs with correlation ID propagation.
+
+## API Contract Workflow
+
+1. Update/verify API contract in `../goals-tracker-api/swagger.yaml`.
+2. Regenerate TypeScript types with `openapi-typescript`.
+3. Use generated `paths` types in centralized `openapi-fetch` client.
+4. Keep domain logic in API; bot only orchestrates and maps errors to user messages.
+
+## Deployment Mode
+
+- Local development: `BOT_MODE=polling`.
+- Production deployments (including serverless): `BOT_MODE=webhook`.
+- Do not run polling and webhook at the same time for the same bot token.
+
 ## Local Multi-Repo Layout
 
 Expected local structure:

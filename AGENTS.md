@@ -36,6 +36,16 @@ Business docs map for agents:
   - `../goals-tracker-api/swagger.yaml`
   - `../goals-tracker-api/docs/business-spec/05-api-contracts-mvp.md`
 
+### API client stack convention (required)
+
+- Use `openapi-typescript` to generate TypeScript types from `../goals-tracker-api/swagger.yaml`.
+- Use `openapi-fetch` as the typed HTTP client on top of native `fetch`.
+- Keep one centralized API client module; do not scatter HTTP calls across handlers.
+- Inject auth/user headers in client middleware:
+  - `Authorization: Bearer <GOALS_API_SERVICE_TOKEN>`
+  - `X-Telegram-User-Id`
+- Avoid introducing `axios` unless there is an explicit task-level requirement.
+
 ## 2) Checks before each commit (required)
 
 Before **every** commit creation, run checks that match this repository's CI.
