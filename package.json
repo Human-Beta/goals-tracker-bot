@@ -2,7 +2,7 @@
   "name": "goals-tracker-bot",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "eslint": "^9",
     "husky": "^9.1.7",
     "openapi-typescript": "^7.10.1",

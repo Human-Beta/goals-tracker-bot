@@ -25,7 +25,7 @@ This repository is the edit target. API repository files are used as a reference
 
 ## Recommended MVP Stack
 
-- Runtime: Node.js (use an active LTS release).
+- Runtime: Node.js >=22 (active LTS release).
 - Language: TypeScript.
 - Telegram framework: `grammY`.
 - API contracts typing: `openapi-typescript` generated from `../goals-tracker-api/swagger.yaml`.
