@@ -12,12 +12,14 @@
     "lint": "eslint .",
     "format": "prettier -w .",
     "test": "vitest run",
-    "generate:api-types": "openapi-typescript ../goals-tracker-api/swagger.yaml -o src/api/generated/schema.d.ts"
+    "generate:api-types": "openapi-typescript ../goals-tracker-api/swagger.yaml -o src/api/generated/schema.d.ts",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^9",
     "@types/node": "^20",
     "eslint": "^9",
+    "husky": "^9.1.7",
     "openapi-typescript": "^7.10.1",
     "prettier": "^3",
     "tsx": "^4",
