@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CORRELATION_ID_HEADER, createGoalsApiClient, type GoalsApiFetch } from '../src/api/client';
+import { UUID_PATTERN } from '../src/shared/patterns';
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -62,6 +63,6 @@ describe('createGoalsApiClient middleware', () => {
 
     expect(requests).toHaveLength(1);
     const correlationId = requests[0].headers.get(CORRELATION_ID_HEADER);
-    expect(correlationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(correlationId).toMatch(UUID_PATTERN);
   });
 });
