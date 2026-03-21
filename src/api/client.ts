@@ -251,27 +251,24 @@ export function createGoalsApiClient(options: CreateGoalsApiClientOptions): Goal
     init?: RequestOptionsFor<Path, Method>
   ): Promise<OperationData<OperationFor<Path, Method>>> {
     const normalizedMethod = normalizeMethod(method);
-
-    try {
-      const result = await invokeRequest(method, String(path), init);
-
-      if (result.error !== undefined) {
-        throw normalizeApiError({
-          status: result.response.status,
-          error: result.error,
-          method: normalizedMethod,
-          path: String(path),
-        });
-      }
-
-      return result.data as OperationData<OperationFor<Path, Method>>;
-    } catch (error) {
+    const result = await invokeRequest(method, String(path), init).catch(error => {
       throw normalizeApiError({
         error,
         method: normalizedMethod,
         path: String(path),
       });
+    });
+
+    if (result.error !== undefined) {
+      throw normalizeApiError({
+        status: result.response.status,
+        error: result.error,
+        method: normalizedMethod,
+        path: String(path),
+      });
     }
+
+    return result.data as OperationData<OperationFor<Path, Method>>;
   }
 
   return {
