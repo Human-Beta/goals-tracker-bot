@@ -2,3 +2,5 @@ dist
 node_modules
 coverage
 .vercel
+
+src/api/generated/schema.d.ts
