@@ -7,7 +7,9 @@ export function createBot(config: AppConfig): Bot<Context> {
   const bot = new Bot<Context>(config.TELEGRAM_BOT_TOKEN);
 
   bot.on('message:text', async ctx => {
+    console.debug('[bot] incoming raw message', ctx.message);
     const responseText = routeTextMessage(ctx.message.text);
+    console.debug('[bot] outgoing reply payload', { text: responseText });
     await ctx.reply(responseText);
   });
 
