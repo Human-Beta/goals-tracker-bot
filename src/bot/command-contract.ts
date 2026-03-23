@@ -79,7 +79,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
     validators: {
       timezone: timezoneValidator,
     },
-    implemented: false,
+    implemented: true,
   },
   goal_create: {
     name: 'goal_create',
