@@ -19,6 +19,8 @@ const TEST_CONFIG: AppConfig = {
 };
 
 const USER_TIMEZONE_HINT = 'Please provide a valid IANA timezone. Example: /start timezone=Europe/Kyiv';
+const GOAL_CREATE_VALIDATION_HINT =
+  'Could not create the goal. Please check title, unit, target, and date format (YYYY-MM-DD), then try again.';
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -312,4 +314,212 @@ describe('bot update handling', () => {
       });
     }
   );
+
+  it('handles /goal_create by calling POST /goals and returning key fields', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsRequests: Request[] = [];
+
+    const goalsApiFetch: GoalsApiFetch = async (input, init) => {
+      const request = toRequest(input, init);
+      goalsRequests.push(request);
+      return jsonResponse(
+        {
+          id: '55555555-5555-4555-8555-555555555555',
+          user_id: '11111111-1111-4111-8111-111111111111',
+          title: 'Read Clean Code',
+          unit: 'pages',
+          target_value: 464,
+          start_date: '2026-02-10',
+          end_date: '2026-03-15',
+          status: 'active',
+          created_at: '2026-02-10T12:00:00.000Z',
+          updated_at: '2026-02-10T12:00:00.000Z',
+        },
+        201
+      );
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 5,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(
+      '/goal_create title="Read Clean Code" unit=pages target=464 end=2026-03-15 start=2026-02-10'
+    );
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    expect(goalsRequests).toHaveLength(1);
+    const request = goalsRequests[0];
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe('/goals');
+    expect(request.headers.get('Authorization')).toBe('Bearer service-token');
+    expect(request.headers.get('X-Telegram-User-Id')).toBe('12345');
+    expect(await request.clone().json()).toEqual({
+      title: 'Read Clean Code',
+      unit: 'pages',
+      target_value: 464,
+      start_date: '2026-02-10',
+      end_date: '2026-03-15',
+    });
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('id: 55555555-5555-4555-8555-555555555555');
+    expect(sendMessagePayload.text).toContain('title: Read Clean Code');
+    expect(sendMessagePayload.text).toContain('target: 464');
+    expect(sendMessagePayload.text).toContain('end_date: 2026-03-15');
+  });
+
+  it('returns format validation message and does not call API for invalid /goal_create payload', async () => {
+    const apiCalls: ApiCall[] = [];
+    let didCallGoalsApi = false;
+
+    const goalsApiFetch: GoalsApiFetch = async () => {
+      didCallGoalsApi = true;
+      return jsonResponse({});
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 6,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate('/goal_create title="Read Clean Code" unit=pages target=abc end=2026-03-15');
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    expect(didCallGoalsApi).toBe(false);
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('Invalid command format');
+    expect(sendMessagePayload.text).toContain('argument "target" must be a valid number');
+    expect(sendMessagePayload.text).toContain('/goal_create title="<text>" unit=<pages|minutes|km> target=<number>');
+  });
+
+  it('returns user-friendly message when /goal_create fails with 400', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsApiFetch: GoalsApiFetch = async () =>
+      jsonResponse(
+        {
+          code: 'validation_error',
+          message: 'end_date must be after today',
+        },
+        400
+      );
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 7,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate('/goal_create title="Read Clean Code" unit=pages target=464 end=2026-03-15');
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    expect(sendMessageCall?.payload).toMatchObject({
+      chat_id: 12345,
+      text: GOAL_CREATE_VALIDATION_HINT,
+    });
+  });
 });
