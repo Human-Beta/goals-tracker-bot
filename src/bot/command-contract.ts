@@ -101,7 +101,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
     requiredKeys: [],
     optionalKeys: [],
     validators: {},
-    implemented: false,
+    implemented: true,
   },
   goal: {
     name: 'goal',
