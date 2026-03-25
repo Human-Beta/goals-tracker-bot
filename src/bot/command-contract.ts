@@ -93,7 +93,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
       start: dateValidator,
       end: dateValidator,
     },
-    implemented: false,
+    implemented: true,
   },
   goals: {
     name: 'goals',
