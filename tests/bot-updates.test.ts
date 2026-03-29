@@ -749,8 +749,8 @@ describe('bot update handling', () => {
     expect(sendMessagePayload.text).toContain('current_value: 197');
     expect(sendMessagePayload.text).toContain('remaining_value: 267');
     expect(sendMessagePayload.text).toContain('days_left: 19');
-    expect(sendMessagePayload.text).toContain('pace_current_7d: 13.25');
-    expect(sendMessagePayload.text).toContain('pace_required_per_day: 14.05');
+    expect(sendMessagePayload.text).toContain('pace_current_7d: 13.3');
+    expect(sendMessagePayload.text).toContain('pace_required_per_day: 14.1');
     expect(sendMessagePayload.text).toContain('eta_date: 2026-03-30');
     expect(sendMessagePayload.text).toContain('behind_value: 11.5');
     expect(sendMessagePayload.text).not.toContain(GOAL_DETAILS_ETA_NULL_EXPLANATION);
@@ -767,9 +767,10 @@ describe('bot update handling', () => {
     );
 
     expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('percent_complete: 25.9');
     expect(sendMessagePayload.text).toContain('eta_date: null');
     expect(sendMessagePayload.text).toContain(`eta_note: ${GOAL_DETAILS_ETA_NULL_EXPLANATION}`);
-    expect(sendMessagePayload.text).toContain('behind_value: 7.75');
+    expect(sendMessagePayload.text).toContain('behind_value: 7.8');
   });
 
   it('keeps negative sign for behind_value when /goal returns ahead-of-schedule metrics', async () => {

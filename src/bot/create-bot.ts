@@ -134,6 +134,14 @@ function formatGoalsListResponse(items: GoalListItem[]): string {
   return formattedItems.join('\n\n');
 }
 
+function formatGoalDetailsMetricValue(value: number): string {
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return (Math.round(value * 10) / 10).toFixed(1);
+}
+
 function formatGoalDetailsResponse(goal: GoalDetail): string {
   const etaLines =
     goal.eta_date === null
@@ -146,14 +154,14 @@ function formatGoalDetailsResponse(goal: GoalDetail): string {
   return formatLabelValueLines([
     ['id', goal.id],
     ['title', goal.title],
-    ['percent_complete', goal.percent_complete],
-    ['current_value', goal.current_value],
-    ['remaining_value', goal.remaining_value],
-    ['days_left', goal.days_left],
-    ['pace_current_7d', goal.pace_current_7d],
-    ['pace_required_per_day', goal.pace_required_per_day],
+    ['percent_complete', formatGoalDetailsMetricValue(goal.percent_complete)],
+    ['current_value', formatGoalDetailsMetricValue(goal.current_value)],
+    ['remaining_value', formatGoalDetailsMetricValue(goal.remaining_value)],
+    ['days_left', formatGoalDetailsMetricValue(goal.days_left)],
+    ['pace_current_7d', formatGoalDetailsMetricValue(goal.pace_current_7d)],
+    ['pace_required_per_day', formatGoalDetailsMetricValue(goal.pace_required_per_day)],
     ...etaLines,
-    ['behind_value', goal.behind_value],
+    ['behind_value', formatGoalDetailsMetricValue(goal.behind_value)],
   ]);
 }
 
