@@ -9,6 +9,7 @@ import {
   handleGoalsListCommand,
   handleStartCommand,
 } from './command-handlers';
+import { parseGoalDetailsCallbackData } from './goal-callback-data';
 import type { CreateBotDependencies } from './goals-client-context';
 import { START_TIMEZONE_HINT } from './messages';
 import { formatInvalidCommandMessage, routeTextMessage } from './router';
@@ -66,4 +67,19 @@ export async function resolveCommandResponse(
   }
 
   return response;
+}
+
+export async function resolveCallbackQueryResponse(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  callbackData: string
+): Promise<CommandResponse | null> {
+  const goalId = parseGoalDetailsCallbackData(callbackData);
+  if (goalId === null) {
+    return null;
+  }
+
+  const responseText = await handleGoalDetailsCommand(ctx, config, dependencies, { id: goalId });
+  return toCommandResponse(responseText);
 }

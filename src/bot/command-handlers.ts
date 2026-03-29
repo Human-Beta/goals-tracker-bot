@@ -1,9 +1,10 @@
-import { Keyboard, type Context } from 'grammy';
+import { InlineKeyboard, type Context } from 'grammy';
 
 import { AuthError, NotFoundError, ValidationError } from '../api/errors';
 import type { components } from '../api/generated/schema';
 import type { AppConfig } from '../config';
 import { createUserScopedGoalsClient, type CreateBotDependencies } from './goals-client-context';
+import { buildGoalDetailsCallbackData } from './goal-callback-data';
 import { toCommandResponse, type CommandResponse } from './command-response';
 import {
   GOAL_CREATE_UPSTREAM_FALLBACK_MESSAGE,
@@ -23,6 +24,7 @@ import {
   formatGoalCreateSuccessResponse,
   formatGoalDetailsResponse,
   formatGoalsListResponse,
+  formatGoalTitleCommandLabel,
 } from './response-formatters';
 
 type GoalUnit = components['schemas']['GoalUnit'];
@@ -33,10 +35,12 @@ function isGoalUnit(value: string): value is GoalUnit {
   return GOAL_UNITS.has(value as GoalUnit);
 }
 
-function buildGoalsListKeyboard(items: GoalListItem[]): Keyboard {
-  const keyboard = Keyboard.from(items.map(goal => [Keyboard.text(`/goal id=${goal.id}`)]));
-
-  return keyboard.resized().oneTime().placeholder('Tap a goal button to open details');
+function buildGoalsListKeyboard(items: GoalListItem[]): InlineKeyboard {
+  return InlineKeyboard.from(
+    items.map(goal => [
+      InlineKeyboard.text(formatGoalTitleCommandLabel(goal.title), buildGoalDetailsCallbackData(goal.id)),
+    ])
+  );
 }
 
 export async function handleStartCommand(

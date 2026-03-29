@@ -17,6 +17,20 @@ function formatGoalDetailsMetricValue(value: number): string {
   return (Math.round(value * 10) / 10).toFixed(1);
 }
 
+function formatCommandTextArg(value: string): string {
+  const isSimpleToken = /^[^\s"=]+$/.test(value);
+  if (isSimpleToken) {
+    return value;
+  }
+
+  const escapedValue = value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return `"${escapedValue}"`;
+}
+
+export function formatGoalTitleCommandLabel(title: string): string {
+  return `/goal title=${formatCommandTextArg(title)}`;
+}
+
 export function formatGoalCreateSuccessResponse(goal: GoalBase): string {
   return [
     'Goal created successfully:',
