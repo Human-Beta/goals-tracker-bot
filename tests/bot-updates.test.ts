@@ -33,6 +33,12 @@ type GoalDetail = components['schemas']['GoalDetail'];
 type SendMessagePayload = {
   chat_id: number;
   text: string;
+  reply_markup?: {
+    keyboard?: Array<Array<{ text: string }>>;
+    one_time_keyboard?: boolean;
+    resize_keyboard?: boolean;
+    input_field_placeholder?: string;
+  };
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -677,7 +683,7 @@ describe('bot update handling', () => {
       }
 
       if (method === 'sendMessage') {
-        const sendMessagePayload = payload as { chat_id: number; text: string };
+        const sendMessagePayload = payload as SendMessagePayload;
         return {
           ok: true,
           result: {
@@ -707,7 +713,7 @@ describe('bot update handling', () => {
     expect(request.headers.get('X-Telegram-User-Id')).toBe('12345');
 
     const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
-    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    const sendMessagePayload = sendMessageCall?.payload as SendMessagePayload;
     expect(sendMessagePayload.chat_id).toBe(12345);
     expect(sendMessagePayload.text).toContain('id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     expect(sendMessagePayload.text).toContain('title: Read Clean Code');
@@ -719,6 +725,13 @@ describe('bot update handling', () => {
     expect(sendMessagePayload.text).toContain('percent_complete: 55');
     expect(sendMessagePayload.text).toContain('days_left: 14');
     expect(sendMessagePayload.text).toContain('pace_current_7d: 6.5');
+    expect(sendMessagePayload.reply_markup?.keyboard).toEqual([
+      [{ text: '/goal id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
+      [{ text: '/goal id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }],
+    ]);
+    expect(sendMessagePayload.reply_markup?.one_time_keyboard).toBe(true);
+    expect(sendMessagePayload.reply_markup?.resize_keyboard).toBe(true);
+    expect(sendMessagePayload.reply_markup?.input_field_placeholder).toBe('Tap a goal button to open details');
   });
 
   it('handles /goal by calling GET /goals/{goalId} and rendering metrics from API response', async () => {
@@ -840,6 +853,8 @@ describe('bot update handling', () => {
       chat_id: 12345,
       text: GOALS_LIST_EMPTY_MESSAGE,
     });
+    const sendMessagePayload = sendMessageCall?.payload as SendMessagePayload;
+    expect(sendMessagePayload.reply_markup).toBeUndefined();
   });
 
   it('returns mapped technical message when /goals fails with 401', async () => {

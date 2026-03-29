@@ -1,9 +1,10 @@
-import type { Context } from 'grammy';
+import { Keyboard, type Context } from 'grammy';
 
 import { AuthError, NotFoundError, ValidationError } from '../api/errors';
 import type { components } from '../api/generated/schema';
 import type { AppConfig } from '../config';
 import { createUserScopedGoalsClient, type CreateBotDependencies } from './goals-client-context';
+import { toCommandResponse, type CommandResponse } from './command-response';
 import {
   GOAL_CREATE_UPSTREAM_FALLBACK_MESSAGE,
   GOAL_CREATE_VALIDATION_HINT,
@@ -25,10 +26,17 @@ import {
 } from './response-formatters';
 
 type GoalUnit = components['schemas']['GoalUnit'];
+type GoalListItem = components['schemas']['GoalListItem'];
 const GOAL_UNITS: ReadonlySet<GoalUnit> = new Set(['pages', 'minutes', 'km']);
 
 function isGoalUnit(value: string): value is GoalUnit {
   return GOAL_UNITS.has(value as GoalUnit);
+}
+
+function buildGoalsListKeyboard(items: GoalListItem[]): Keyboard {
+  const keyboard = Keyboard.from(items.map(goal => [Keyboard.text(`/goal id=${goal.id}`)]));
+
+  return keyboard.resized().oneTime().placeholder('Tap a goal button to open details');
 }
 
 export async function handleStartCommand(
@@ -121,30 +129,32 @@ export async function handleGoalsListCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies
-): Promise<string> {
+): Promise<CommandResponse> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE;
+    return toCommandResponse(GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE);
   }
 
   try {
     const response = await scopedClient.client.GET('/goals');
     if (response.items.length === 0) {
-      return GOALS_LIST_EMPTY_MESSAGE;
+      return toCommandResponse(GOALS_LIST_EMPTY_MESSAGE);
     }
 
-    return formatGoalsListResponse(response.items);
+    return toCommandResponse(formatGoalsListResponse(response.items), {
+      reply_markup: buildGoalsListKeyboard(response.items),
+    });
   } catch (error) {
     if (error instanceof AuthError) {
-      return GOALS_LIST_AUTH_ERROR_MESSAGE;
+      return toCommandResponse(GOALS_LIST_AUTH_ERROR_MESSAGE);
     }
 
     if (error instanceof NotFoundError) {
-      return GOALS_LIST_NOT_FOUND_MESSAGE;
+      return toCommandResponse(GOALS_LIST_NOT_FOUND_MESSAGE);
     }
 
     console.warn('[bot] failed to list goals on /goals', error);
-    return GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE;
+    return toCommandResponse(GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE);
   }
 }
 

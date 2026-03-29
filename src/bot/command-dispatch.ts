@@ -2,6 +2,7 @@ import type { Context } from 'grammy';
 
 import type { AppConfig } from '../config';
 import type { CommandParseResult } from './command-parser';
+import { toCommandResponse, type CommandResponse } from './command-response';
 import {
   handleGoalCreateCommand,
   handleGoalDetailsCommand,
@@ -18,18 +19,18 @@ export async function resolveCommandResponse(
   dependencies: CreateBotDependencies,
   rawText: string,
   parsedCommand: CommandParseResult
-): Promise<string> {
-  let responseText = routeTextMessage(rawText);
+): Promise<CommandResponse> {
+  let response = toCommandResponse(routeTextMessage(rawText));
 
   switch (parsedCommand.kind) {
     case 'invalid_command':
       switch (parsedCommand.commandName) {
         case 'start':
-          responseText = START_TIMEZONE_HINT;
+          response = toCommandResponse(START_TIMEZONE_HINT);
           break;
         case 'goal_create':
         case 'goal':
-          responseText = formatInvalidCommandMessage(parsedCommand.reason, parsedCommand.usage);
+          response = toCommandResponse(formatInvalidCommandMessage(parsedCommand.reason, parsedCommand.usage));
           break;
         default:
           break;
@@ -38,16 +39,22 @@ export async function resolveCommandResponse(
     case 'known_command':
       switch (parsedCommand.command.name) {
         case 'start':
-          responseText = await handleStartCommand(ctx, config, dependencies, parsedCommand.command.args.timezone);
+          response = toCommandResponse(
+            await handleStartCommand(ctx, config, dependencies, parsedCommand.command.args.timezone)
+          );
           break;
         case 'goal_create':
-          responseText = await handleGoalCreateCommand(ctx, config, dependencies, parsedCommand.command.args);
+          response = toCommandResponse(
+            await handleGoalCreateCommand(ctx, config, dependencies, parsedCommand.command.args)
+          );
           break;
         case 'goals':
-          responseText = await handleGoalsListCommand(ctx, config, dependencies);
+          response = await handleGoalsListCommand(ctx, config, dependencies);
           break;
         case 'goal':
-          responseText = await handleGoalDetailsCommand(ctx, config, dependencies, parsedCommand.command.args);
+          response = toCommandResponse(
+            await handleGoalDetailsCommand(ctx, config, dependencies, parsedCommand.command.args)
+          );
           break;
         default:
           break;
@@ -58,5 +65,5 @@ export async function resolveCommandResponse(
       break;
   }
 
-  return responseText;
+  return response;
 }
