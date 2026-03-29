@@ -11,10 +11,10 @@ export function createBot(config: AppConfig, dependencies: CreateBotDependencies
   bot.on('message:text', async ctx => {
     console.debug('[bot] incoming raw message', ctx.message);
     const parsedCommand = parseCommandText(ctx.message.text);
-    const responseText = await resolveCommandResponse(ctx, config, dependencies, ctx.message.text, parsedCommand);
+    const response = await resolveCommandResponse(ctx, config, dependencies, ctx.message.text, parsedCommand);
 
-    console.debug('[bot] outgoing reply payload', { text: responseText });
-    await ctx.reply(responseText);
+    console.debug('[bot] outgoing reply payload', response);
+    await ctx.reply(response.text, response.replyOptions);
   });
 
   return bot;
