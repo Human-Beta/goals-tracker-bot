@@ -111,7 +111,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
     validators: {
       id: uuidValidator,
     },
-    implemented: false,
+    implemented: true,
   },
   goal_edit: {
     name: 'goal_edit',
