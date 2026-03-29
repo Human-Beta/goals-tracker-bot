@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GoalsApiFetch } from '../src/api/client';
+import type { components } from '../src/api/generated/schema';
 import { createBot } from '../src/bot/create-bot';
 import type { AppConfig } from '../src/config';
 
@@ -25,6 +26,14 @@ const GOALS_LIST_EMPTY_MESSAGE = "You don't have any goals yet. Create one with 
 const GOALS_LIST_AUTH_ERROR_MESSAGE = 'Temporary technical issue while loading your goals. Please try again later.';
 const GOALS_LIST_NOT_FOUND_MESSAGE =
   'Could not find your profile context. Run /start timezone=<IANA> and then try /goals again.';
+const GOAL_DETAILS_ETA_NULL_EXPLANATION = 'ETA cannot be estimated at the current pace.';
+const GOAL_DETAILS_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+type GoalDetail = components['schemas']['GoalDetail'];
+type SendMessagePayload = {
+  chat_id: number;
+  text: string;
+};
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -68,6 +77,101 @@ function buildTextUpdate(text: string): Parameters<ReturnType<typeof createBot>[
         },
       ],
     },
+  };
+}
+
+function buildGoalDetailResponse(overrides: Partial<GoalDetail> = {}): GoalDetail {
+  return {
+    id: GOAL_DETAILS_ID,
+    user_id: '11111111-1111-4111-8111-111111111111',
+    title: 'Read Clean Code',
+    unit: 'pages',
+    target_value: 464,
+    start_date: '2026-02-10',
+    end_date: '2026-03-15',
+    status: 'active',
+    created_at: '2026-02-10T12:00:00.000Z',
+    updated_at: '2026-02-12T12:00:00.000Z',
+    current_value: 120,
+    remaining_value: 344,
+    percent_complete: 25.86,
+    days_left: 20,
+    days_left_for_pace: 21,
+    days_total: 34,
+    days_elapsed: 14,
+    pace_expected_per_day: 13.6470588235,
+    pace_required_per_day: 16.380952381,
+    pace_current_7d: 10.2,
+    pace_current_30d: 8.5,
+    pace_current_all: 8.571428571,
+    eta_date: '2026-04-18',
+    expected_by_today: 191.0588235294,
+    behind_value: 71.0588235294,
+    catchup_pace_next_7_days: 20.25,
+    ...overrides,
+  };
+}
+
+async function runGoalDetailsScenario(
+  goalsApiFetch: GoalsApiFetch,
+  command = `/goal id=${GOAL_DETAILS_ID}`
+): Promise<{ goalsRequests: Request[]; sendMessagePayload: SendMessagePayload }> {
+  const apiCalls: ApiCall[] = [];
+  const goalsRequests: Request[] = [];
+
+  const trackedFetch: GoalsApiFetch = async (input, init) => {
+    goalsRequests.push(toRequest(input, init));
+    return goalsApiFetch(input, init);
+  };
+
+  const bot = createBot(TEST_CONFIG, { goalsApiFetch: trackedFetch });
+  bot.api.config.use(async (_prev, method, payload) => {
+    apiCalls.push({ method, payload });
+    if (method === 'getMe') {
+      return {
+        ok: true,
+        result: {
+          id: 999,
+          is_bot: true,
+          first_name: 'Test Bot',
+          username: 'test_bot',
+          can_join_groups: true,
+          can_read_all_group_messages: false,
+          supports_inline_queries: false,
+        },
+      } as Awaited<ReturnType<typeof _prev>>;
+    }
+
+    if (method === 'sendMessage') {
+      const sendMessagePayload = payload as SendMessagePayload;
+      return {
+        ok: true,
+        result: {
+          message_id: 200,
+          date: 1,
+          chat: {
+            id: sendMessagePayload.chat_id,
+            type: 'private',
+          },
+          text: sendMessagePayload.text,
+        },
+      } as Awaited<ReturnType<typeof _prev>>;
+    }
+
+    throw new Error(`Unexpected Telegram method: ${method}`);
+  });
+
+  await bot.init();
+  await bot.handleUpdate(buildTextUpdate(command));
+
+  const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+  if (sendMessageCall === undefined) {
+    throw new Error('Expected sendMessage call in goal details scenario');
+  }
+
+  return {
+    goalsRequests,
+    sendMessagePayload: sendMessageCall.payload as SendMessagePayload,
   };
 }
 
@@ -615,6 +719,70 @@ describe('bot update handling', () => {
     expect(sendMessagePayload.text).toContain('percent_complete: 55');
     expect(sendMessagePayload.text).toContain('days_left: 14');
     expect(sendMessagePayload.text).toContain('pace_current_7d: 6.5');
+  });
+
+  it('handles /goal by calling GET /goals/{goalId} and rendering metrics from API response', async () => {
+    const expectedGoalDetail = buildGoalDetailResponse({
+      percent_complete: 42.5,
+      current_value: 197,
+      remaining_value: 267,
+      days_left: 19,
+      pace_current_7d: 13.25,
+      pace_required_per_day: 14.05,
+      eta_date: '2026-03-30',
+      behind_value: 11.5,
+    });
+
+    const { goalsRequests, sendMessagePayload } = await runGoalDetailsScenario(async () =>
+      jsonResponse(expectedGoalDetail)
+    );
+
+    expect(goalsRequests).toHaveLength(1);
+    const request = goalsRequests[0];
+    expect(request.method).toBe('GET');
+    expect(new URL(request.url).pathname).toBe(`/goals/${GOAL_DETAILS_ID}`);
+    expect(request.headers.get('Authorization')).toBe('Bearer service-token');
+    expect(request.headers.get('X-Telegram-User-Id')).toBe('12345');
+
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('percent_complete: 42.5');
+    expect(sendMessagePayload.text).toContain('current_value: 197');
+    expect(sendMessagePayload.text).toContain('remaining_value: 267');
+    expect(sendMessagePayload.text).toContain('days_left: 19');
+    expect(sendMessagePayload.text).toContain('pace_current_7d: 13.25');
+    expect(sendMessagePayload.text).toContain('pace_required_per_day: 14.05');
+    expect(sendMessagePayload.text).toContain('eta_date: 2026-03-30');
+    expect(sendMessagePayload.text).toContain('behind_value: 11.5');
+    expect(sendMessagePayload.text).not.toContain(GOAL_DETAILS_ETA_NULL_EXPLANATION);
+  });
+
+  it('renders explanation when /goal returns eta_date as null', async () => {
+    const { sendMessagePayload } = await runGoalDetailsScenario(async () =>
+      jsonResponse(
+        buildGoalDetailResponse({
+          eta_date: null,
+          behind_value: 7.75,
+        })
+      )
+    );
+
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('eta_date: null');
+    expect(sendMessagePayload.text).toContain(`eta_note: ${GOAL_DETAILS_ETA_NULL_EXPLANATION}`);
+    expect(sendMessagePayload.text).toContain('behind_value: 7.75');
+  });
+
+  it('keeps negative sign for behind_value when /goal returns ahead-of-schedule metrics', async () => {
+    const { sendMessagePayload } = await runGoalDetailsScenario(async () =>
+      jsonResponse(
+        buildGoalDetailResponse({
+          behind_value: -6.2,
+        })
+      )
+    );
+
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('behind_value: -6.2');
   });
 
   it('returns dedicated empty-state message when /goals list is empty', async () => {

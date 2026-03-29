@@ -4,7 +4,7 @@ import { createGoalsApiClient, type GoalsApiClient, type GoalsApiFetch } from '.
 import { AuthError, NotFoundError, ValidationError } from '../api/errors';
 import type { components } from '../api/generated/schema';
 import type { AppConfig } from '../config';
-import { parseCommandText } from './command-parser';
+import { CommandParseResult, parseCommandText } from './command-parser';
 import { formatInvalidCommandMessage, routeTextMessage } from './router';
 
 const START_SUCCESS_MESSAGE = 'You are all set. Timezone saved:';
@@ -18,10 +18,17 @@ const GOALS_LIST_AUTH_ERROR_MESSAGE = 'Temporary technical issue while loading y
 const GOALS_LIST_NOT_FOUND_MESSAGE =
   'Could not find your profile context. Run /start timezone=<IANA> and then try /goals again.';
 const GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE = 'Temporary issue while loading your goals. Please try again later.';
+const GOAL_DETAILS_AUTH_ERROR_MESSAGE =
+  'Temporary technical issue while loading your goal details. Please try again later.';
+const GOAL_DETAILS_NOT_FOUND_MESSAGE = 'Goal not found. Run /goals to check available goal IDs and try again.';
+const GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE =
+  'Temporary issue while loading your goal details. Please try again later.';
+const GOAL_DETAILS_ETA_NULL_EXPLANATION = 'ETA cannot be estimated at the current pace.';
 
 type GoalUnit = components['schemas']['GoalUnit'];
 type GoalBase = components['schemas']['GoalBase'];
 type GoalListItem = components['schemas']['GoalListItem'];
+type GoalDetail = components['schemas']['GoalDetail'];
 const GOAL_UNITS: ReadonlySet<GoalUnit> = new Set(['pages', 'minutes', 'km']);
 
 export type CreateBotDependencies = {
@@ -39,6 +46,10 @@ function isGoalUnit(value: string): value is GoalUnit {
 
 function getInvalidStartResponse(): string {
   return START_TIMEZONE_HINT;
+}
+
+function formatLabelValueLines(lines: ReadonlyArray<readonly [label: string, value: string | number]>): string {
+  return lines.map(([label, value]) => `${label}: ${value}`).join('\n');
 }
 
 function createUserScopedGoalsClient(
@@ -100,25 +111,50 @@ async function handleStartCommand(
 function formatGoalCreateSuccessResponse(goal: GoalBase): string {
   return [
     'Goal created successfully:',
-    `id: ${goal.id}`,
-    `title: ${goal.title}`,
-    `target: ${goal.target_value}`,
-    `end_date: ${goal.end_date}`,
+    formatLabelValueLines([
+      ['id', goal.id],
+      ['title', goal.title],
+      ['target', goal.target_value],
+      ['end_date', goal.end_date],
+    ]),
   ].join('\n');
 }
 
 function formatGoalsListResponse(items: GoalListItem[]): string {
   const formattedItems = items.map(goal =>
-    [
-      `id: ${goal.id}`,
-      `title: ${goal.title}`,
-      `percent_complete: ${goal.percent_complete}`,
-      `days_left: ${goal.days_left}`,
-      `pace_current_7d: ${goal.pace_current_7d}`,
-    ].join('\n')
+    formatLabelValueLines([
+      ['id', goal.id],
+      ['title', goal.title],
+      ['percent_complete', goal.percent_complete],
+      ['days_left', goal.days_left],
+      ['pace_current_7d', goal.pace_current_7d],
+    ])
   );
 
   return formattedItems.join('\n\n');
+}
+
+function formatGoalDetailsResponse(goal: GoalDetail): string {
+  const etaLines =
+    goal.eta_date === null
+      ? ([
+          ['eta_date', 'null'],
+          ['eta_note', GOAL_DETAILS_ETA_NULL_EXPLANATION],
+        ] as const)
+      : ([['eta_date', goal.eta_date]] as const);
+
+  return formatLabelValueLines([
+    ['id', goal.id],
+    ['title', goal.title],
+    ['percent_complete', goal.percent_complete],
+    ['current_value', goal.current_value],
+    ['remaining_value', goal.remaining_value],
+    ['days_left', goal.days_left],
+    ['pace_current_7d', goal.pace_current_7d],
+    ['pace_required_per_day', goal.pace_required_per_day],
+    ...etaLines,
+    ['behind_value', goal.behind_value],
+  ]);
 }
 
 async function handleGoalCreateCommand(
@@ -204,27 +240,102 @@ async function handleGoalsListCommand(
   }
 }
 
+async function handleGoalDetailsCommand(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  args: Readonly<Record<string, string>>
+): Promise<string> {
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  if (scopedClient === null) {
+    return GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  const goalId = args.id;
+  if (goalId === undefined) {
+    return GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  try {
+    const response = await scopedClient.client.GET('/goals/{goalId}', {
+      params: {
+        path: {
+          goalId,
+        },
+      },
+    });
+
+    return formatGoalDetailsResponse(response);
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return GOAL_DETAILS_AUTH_ERROR_MESSAGE;
+    }
+
+    if (error instanceof NotFoundError) {
+      return GOAL_DETAILS_NOT_FOUND_MESSAGE;
+    }
+
+    console.warn('[bot] failed to get goal details on /goal', error);
+    return GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE;
+  }
+}
+
+async function resolveCommandResponse(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  rawText: string,
+  parsedCommand: CommandParseResult
+): Promise<string> {
+  let responseText = routeTextMessage(rawText);
+
+  switch (parsedCommand.kind) {
+    case 'invalid_command':
+      switch (parsedCommand.commandName) {
+        case 'start':
+          responseText = getInvalidStartResponse();
+          break;
+        case 'goal_create':
+        case 'goal':
+          responseText = formatInvalidCommandMessage(parsedCommand.reason, parsedCommand.usage);
+          break;
+        default:
+          break;
+      }
+      break;
+    case 'known_command':
+      switch (parsedCommand.command.name) {
+        case 'start':
+          responseText = await handleStartCommand(ctx, config, dependencies, parsedCommand.command.args.timezone);
+          break;
+        case 'goal_create':
+          responseText = await handleGoalCreateCommand(ctx, config, dependencies, parsedCommand.command.args);
+          break;
+        case 'goals':
+          responseText = await handleGoalsListCommand(ctx, config, dependencies);
+          break;
+        case 'goal':
+          responseText = await handleGoalDetailsCommand(ctx, config, dependencies, parsedCommand.command.args);
+          break;
+        default:
+          break;
+      }
+      break;
+    case 'not_command':
+    case 'unknown_command':
+      break;
+  }
+
+  return responseText;
+}
+
 export function createBot(config: AppConfig, dependencies: CreateBotDependencies = {}): Bot<Context> {
   const bot = new Bot<Context>(config.TELEGRAM_BOT_TOKEN);
 
   bot.on('message:text', async ctx => {
     console.debug('[bot] incoming raw message', ctx.message);
     const parsedCommand = parseCommandText(ctx.message.text);
-    let responseText: string;
-
-    if (parsedCommand.kind === 'invalid_command' && parsedCommand.commandName === 'start') {
-      responseText = getInvalidStartResponse();
-    } else if (parsedCommand.kind === 'invalid_command' && parsedCommand.commandName === 'goal_create') {
-      responseText = formatInvalidCommandMessage(parsedCommand.reason, parsedCommand.usage);
-    } else if (parsedCommand.kind === 'known_command' && parsedCommand.command.name === 'start') {
-      responseText = await handleStartCommand(ctx, config, dependencies, parsedCommand.command.args.timezone);
-    } else if (parsedCommand.kind === 'known_command' && parsedCommand.command.name === 'goal_create') {
-      responseText = await handleGoalCreateCommand(ctx, config, dependencies, parsedCommand.command.args);
-    } else if (parsedCommand.kind === 'known_command' && parsedCommand.command.name === 'goals') {
-      responseText = await handleGoalsListCommand(ctx, config, dependencies);
-    } else {
-      responseText = routeTextMessage(ctx.message.text);
-    }
+    const responseText = await resolveCommandResponse(ctx, config, dependencies, ctx.message.text, parsedCommand);
 
     console.debug('[bot] outgoing reply payload', { text: responseText });
     await ctx.reply(responseText);
