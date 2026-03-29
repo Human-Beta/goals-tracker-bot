@@ -34,6 +34,7 @@ type SendMessagePayload = {
   chat_id: number;
   text: string;
   reply_markup?: {
+    inline_keyboard?: Array<Array<{ text: string; callback_data: string }>>;
     keyboard?: Array<Array<{ text: string }>>;
     one_time_keyboard?: boolean;
     resize_keyboard?: boolean;
@@ -82,6 +83,32 @@ function buildTextUpdate(text: string): Parameters<ReturnType<typeof createBot>[
           type: 'bot_command',
         },
       ],
+    },
+  };
+}
+
+function buildGoalDetailsCallbackUpdate(goalId: string): Parameters<ReturnType<typeof createBot>['handleUpdate']>[0] {
+  return {
+    update_id: 2,
+    callback_query: {
+      id: 'callback-query-1',
+      from: {
+        id: 12345,
+        is_bot: false,
+        first_name: 'Test',
+      },
+      chat_instance: 'test-chat-instance',
+      message: {
+        message_id: 6,
+        date: 1,
+        chat: {
+          id: 12345,
+          type: 'private',
+          first_name: 'Test',
+        },
+        text: '/goals',
+      },
+      data: `goal_details:${goalId}`,
     },
   };
 }
@@ -715,23 +742,29 @@ describe('bot update handling', () => {
     const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
     const sendMessagePayload = sendMessageCall?.payload as SendMessagePayload;
     expect(sendMessagePayload.chat_id).toBe(12345);
-    expect(sendMessagePayload.text).toContain('id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     expect(sendMessagePayload.text).toContain('title: Read Clean Code');
     expect(sendMessagePayload.text).toContain('percent_complete: 42.5');
     expect(sendMessagePayload.text).toContain('days_left: 20');
     expect(sendMessagePayload.text).toContain('pace_current_7d: 18.25');
-    expect(sendMessagePayload.text).toContain('id: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
     expect(sendMessagePayload.text).toContain('title: Run 120 km');
     expect(sendMessagePayload.text).toContain('percent_complete: 55');
     expect(sendMessagePayload.text).toContain('days_left: 14');
     expect(sendMessagePayload.text).toContain('pace_current_7d: 6.5');
-    expect(sendMessagePayload.reply_markup?.keyboard).toEqual([
-      [{ text: '/goal id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }],
-      [{ text: '/goal id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }],
+    expect(sendMessagePayload.reply_markup?.inline_keyboard).toEqual([
+      [
+        {
+          text: '/goal title="Read Clean Code"',
+          callback_data: 'goal_details:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        },
+      ],
+      [
+        {
+          text: '/goal title="Run 120 km"',
+          callback_data: 'goal_details:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        },
+      ],
     ]);
-    expect(sendMessagePayload.reply_markup?.one_time_keyboard).toBe(true);
-    expect(sendMessagePayload.reply_markup?.resize_keyboard).toBe(true);
-    expect(sendMessagePayload.reply_markup?.input_field_placeholder).toBe('Tap a goal button to open details');
+    expect(sendMessagePayload.reply_markup?.keyboard).toBeUndefined();
   });
 
   it('handles /goal by calling GET /goals/{goalId} and rendering metrics from API response', async () => {
@@ -767,6 +800,97 @@ describe('bot update handling', () => {
     expect(sendMessagePayload.text).toContain('eta_date: 2026-03-30');
     expect(sendMessagePayload.text).toContain('behind_value: 11.5');
     expect(sendMessagePayload.text).not.toContain(GOAL_DETAILS_ETA_NULL_EXPLANATION);
+  });
+
+  it('handles goal-details callback button by loading goal details via hidden id', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsRequests: Request[] = [];
+
+    const goalsApiFetch: GoalsApiFetch = async (input, init) => {
+      const request = toRequest(input, init);
+      goalsRequests.push(request);
+      return jsonResponse(
+        buildGoalDetailResponse({
+          percent_complete: 42.5,
+          current_value: 197,
+          remaining_value: 267,
+          days_left: 19,
+          pace_current_7d: 13.25,
+          pace_required_per_day: 14.05,
+          eta_date: '2026-03-30',
+          behind_value: 11.5,
+        })
+      );
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'answerCallbackQuery') {
+        return {
+          ok: true,
+          result: true,
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as SendMessagePayload;
+        return {
+          ok: true,
+          result: {
+            message_id: 81,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    await bot.init();
+    await bot.handleUpdate(buildGoalDetailsCallbackUpdate(GOAL_DETAILS_ID));
+
+    expect(goalsRequests).toHaveLength(1);
+    const request = goalsRequests[0];
+    expect(request.method).toBe('GET');
+    expect(new URL(request.url).pathname).toBe(`/goals/${GOAL_DETAILS_ID}`);
+    expect(request.headers.get('Authorization')).toBe('Bearer service-token');
+    expect(request.headers.get('X-Telegram-User-Id')).toBe('12345');
+
+    const answerCallbackQueryCall = apiCalls.find(call => call.method === 'answerCallbackQuery');
+    expect(answerCallbackQueryCall).toBeDefined();
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as SendMessagePayload;
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('percent_complete: 42.5');
+    expect(sendMessagePayload.text).toContain('current_value: 197');
+    expect(sendMessagePayload.text).toContain('remaining_value: 267');
+    expect(sendMessagePayload.text).toContain('days_left: 19');
+    expect(sendMessagePayload.text).toContain('pace_current_7d: 13.3');
+    expect(sendMessagePayload.text).toContain('pace_required_per_day: 14.1');
+    expect(sendMessagePayload.text).toContain('eta_date: 2026-03-30');
+    expect(sendMessagePayload.text).toContain('behind_value: 11.5');
   });
 
   it('renders explanation when /goal returns eta_date as null', async () => {
