@@ -93,4 +93,43 @@ describe('parseCommandText', () => {
       commandName: 'hello',
     });
   });
+
+  it('accepts goal_edit with unit so the handler can return a specific immutable-field message', () => {
+    const parsed = parseCommandText(`/goal_edit id=${UUID_A} unit=km`);
+
+    expect(parsed).toMatchObject({
+      kind: 'known_command',
+      command: {
+        name: 'goal_edit',
+        args: {
+          id: UUID_A,
+          unit: 'km',
+        },
+      },
+    });
+  });
+
+  it('rejects goal_edit when required id is missing', () => {
+    const parsed = parseCommandText('/goal_edit title="New title"');
+
+    expect(parsed).toMatchObject({
+      kind: 'invalid_command',
+      commandName: 'goal_edit',
+    });
+    if (parsed.kind === 'invalid_command') {
+      expect(parsed.reason).toContain('missing required argument "id"');
+    }
+  });
+
+  it('rejects goal_edit when id is not a valid UUID', () => {
+    const parsed = parseCommandText('/goal_edit id=bad-uuid title="New title"');
+
+    expect(parsed).toMatchObject({
+      kind: 'invalid_command',
+      commandName: 'goal_edit',
+    });
+    if (parsed.kind === 'invalid_command') {
+      expect(parsed.reason).toContain('must be a valid UUID');
+    }
+  });
 });
