@@ -117,7 +117,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
     name: 'goal_edit',
     usage: '/goal_edit id=<uuid> [title="<text>"] [target=<number>] [start=<YYYY-MM-DD>] [end=<YYYY-MM-DD>]',
     requiredKeys: ['id'],
-    optionalKeys: ['title', 'target', 'start', 'end'],
+    optionalKeys: ['title', 'target', 'start', 'end', 'unit'],
     validators: {
       id: uuidValidator,
       title: nonEmptyTextValidator,
@@ -125,7 +125,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
       start: dateValidator,
       end: dateValidator,
     },
-    implemented: false,
+    implemented: true,
   },
   progress_add: {
     name: 'progress_add',

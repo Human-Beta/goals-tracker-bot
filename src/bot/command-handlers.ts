@@ -1,6 +1,6 @@
 import { InlineKeyboard, type Context } from 'grammy';
 
-import { AuthError, NotFoundError, ValidationError } from '../api/errors';
+import { AuthError, ConflictError, NotFoundError, ValidationError } from '../api/errors';
 import type { components } from '../api/generated/schema';
 import type { AppConfig } from '../config';
 import { createUserScopedGoalsClient, type CreateBotDependencies } from './goals-client-context';
@@ -12,6 +12,13 @@ import {
   GOAL_DETAILS_AUTH_ERROR_MESSAGE,
   GOAL_DETAILS_NOT_FOUND_MESSAGE,
   GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE,
+  GOAL_EDIT_AUTH_ERROR_MESSAGE,
+  GOAL_EDIT_CONFLICT_MESSAGE,
+  GOAL_EDIT_IMMUTABLE_UNIT_MESSAGE,
+  GOAL_EDIT_NOT_FOUND_MESSAGE,
+  GOAL_EDIT_NOTHING_TO_UPDATE_MESSAGE,
+  GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE,
+  GOAL_EDIT_VALIDATION_HINT,
   GOALS_LIST_AUTH_ERROR_MESSAGE,
   GOALS_LIST_EMPTY_MESSAGE,
   GOALS_LIST_NOT_FOUND_MESSAGE,
@@ -23,6 +30,7 @@ import {
 import {
   formatGoalCreateSuccessResponse,
   formatGoalDetailsResponse,
+  formatGoalEditSuccessResponse,
   formatGoalsListResponse,
   formatGoalTitleCommandLabel,
 } from './response-formatters';
@@ -81,18 +89,12 @@ export async function handleGoalCreateCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  args: Readonly<Record<string, string>>
+  { title, unit, target, end, start }: Readonly<Record<string, string>>
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
     return GOAL_CREATE_UPSTREAM_FALLBACK_MESSAGE;
   }
-
-  const title = args.title;
-  const unit = args.unit;
-  const target = args.target;
-  const end = args.end;
-  const start = args.start;
 
   if (title === undefined || unit === undefined || target === undefined || end === undefined) {
     return GOAL_CREATE_VALIDATION_HINT;
@@ -199,5 +201,75 @@ export async function handleGoalDetailsCommand(
 
     console.warn('[bot] failed to get goal details on /goal', error);
     return GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE;
+  }
+}
+
+export async function handleGoalEditCommand(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  { id: goalId, title, target, start, end, unit }: Readonly<Record<string, string>>
+): Promise<string> {
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  if (scopedClient === null) {
+    return GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  if (goalId === undefined) {
+    return GOAL_EDIT_VALIDATION_HINT;
+  }
+
+  if (unit !== undefined) {
+    return GOAL_EDIT_IMMUTABLE_UNIT_MESSAGE;
+  }
+
+  if (title === undefined && target === undefined && start === undefined && end === undefined) {
+    return GOAL_EDIT_NOTHING_TO_UPDATE_MESSAGE;
+  }
+
+  let targetValue: number | undefined;
+  if (target !== undefined) {
+    const parsedTarget = Number(target);
+    if (!Number.isFinite(parsedTarget)) {
+      return GOAL_EDIT_VALIDATION_HINT;
+    }
+    targetValue = parsedTarget;
+  }
+
+  try {
+    const updatedGoal = await scopedClient.client.PATCH('/goals/{goalId}', {
+      params: {
+        path: {
+          goalId,
+        },
+      },
+      body: {
+        ...(title === undefined ? {} : { title }),
+        ...(targetValue === undefined ? {} : { target_value: targetValue }),
+        ...(start === undefined ? {} : { start_date: start }),
+        ...(end === undefined ? {} : { end_date: end }),
+      },
+    });
+
+    return formatGoalEditSuccessResponse(updatedGoal);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return GOAL_EDIT_VALIDATION_HINT;
+    }
+
+    if (error instanceof ConflictError) {
+      return GOAL_EDIT_CONFLICT_MESSAGE;
+    }
+
+    if (error instanceof NotFoundError) {
+      return GOAL_EDIT_NOT_FOUND_MESSAGE;
+    }
+
+    if (error instanceof AuthError) {
+      return GOAL_EDIT_AUTH_ERROR_MESSAGE;
+    }
+
+    console.warn('[bot] failed to edit goal on /goal_edit', error);
+    return GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE;
   }
 }

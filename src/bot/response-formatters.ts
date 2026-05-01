@@ -43,6 +43,19 @@ export function formatGoalCreateSuccessResponse(goal: GoalBase): string {
   ].join('\n');
 }
 
+export function formatGoalEditSuccessResponse(goal: GoalBase): string {
+  return [
+    'Goal updated successfully:',
+    formatLabelValueLines([
+      ['id', goal.id],
+      ['title', goal.title],
+      ['target', goal.target_value],
+      ['start_date', goal.start_date],
+      ['end_date', goal.end_date],
+    ]),
+  ].join('\n');
+}
+
 export function formatGoalsListResponse(items: GoalListItem[]): string {
   const formattedItems = items.map(goal =>
     formatLabelValueLines([

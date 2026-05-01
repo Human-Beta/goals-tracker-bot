@@ -6,6 +6,7 @@ import { toCommandResponse, type CommandResponse } from './command-response';
 import {
   handleGoalCreateCommand,
   handleGoalDetailsCommand,
+  handleGoalEditCommand,
   handleGoalsListCommand,
   handleStartCommand,
 } from './command-handlers';
@@ -31,6 +32,7 @@ export async function resolveCommandResponse(
           break;
         case 'goal_create':
         case 'goal':
+        case 'goal_edit':
           response = toCommandResponse(formatInvalidCommandMessage(parsedCommand.reason, parsedCommand.usage));
           break;
         default:
@@ -55,6 +57,11 @@ export async function resolveCommandResponse(
         case 'goal':
           response = toCommandResponse(
             await handleGoalDetailsCommand(ctx, config, dependencies, parsedCommand.command.args)
+          );
+          break;
+        case 'goal_edit':
+          response = toCommandResponse(
+            await handleGoalEditCommand(ctx, config, dependencies, parsedCommand.command.args)
           );
           break;
         default:
