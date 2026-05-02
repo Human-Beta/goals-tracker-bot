@@ -33,3 +33,11 @@ export const GOAL_EDIT_CONFLICT_MESSAGE =
 export const GOAL_EDIT_AUTH_ERROR_MESSAGE =
   'Temporary technical issue while updating your goal. Please try again later.';
 export const GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE = 'Temporary issue while updating your goal. Please try again later.';
+
+export const PROGRESS_ADD_VALIDATION_HINT =
+  'Could not record progress. Please check that delta is a positive number and date is in YYYY-MM-DD format, then try again.';
+export const PROGRESS_ADD_NOT_FOUND_MESSAGE = 'Goal not found. Run /goals to check available goal IDs and try again.';
+export const PROGRESS_ADD_AUTH_ERROR_MESSAGE =
+  'Temporary technical issue while recording your progress. Please try again later.';
+export const PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE =
+  'Temporary issue while recording your progress. Please try again later.';

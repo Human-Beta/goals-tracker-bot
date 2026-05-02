@@ -23,6 +23,10 @@ import {
   GOALS_LIST_EMPTY_MESSAGE,
   GOALS_LIST_NOT_FOUND_MESSAGE,
   GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE,
+  PROGRESS_ADD_AUTH_ERROR_MESSAGE,
+  PROGRESS_ADD_NOT_FOUND_MESSAGE,
+  PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE,
+  PROGRESS_ADD_VALIDATION_HINT,
   START_SUCCESS_MESSAGE,
   START_TIMEZONE_HINT,
   START_UPSTREAM_FALLBACK_MESSAGE,
@@ -33,6 +37,7 @@ import {
   formatGoalEditSuccessResponse,
   formatGoalsListResponse,
   formatGoalTitleCommandLabel,
+  formatProgressAddSuccessResponse,
 } from './response-formatters';
 
 type GoalUnit = components['schemas']['GoalUnit'];
@@ -271,5 +276,53 @@ export async function handleGoalEditCommand(
 
     console.warn('[bot] failed to edit goal on /goal_edit', error);
     return GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+  }
+}
+
+export async function handleProgressAddCommand(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  { goal: goalId, delta, date, note }: Readonly<Record<string, string>>
+): Promise<string> {
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  if (scopedClient === null) {
+    return PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  if (goalId === undefined || delta === undefined) {
+    return PROGRESS_ADD_VALIDATION_HINT;
+  }
+
+  try {
+    const event = await scopedClient.client.POST('/goals/{goalId}/progress', {
+      params: {
+        path: {
+          goalId,
+        },
+      },
+      body: {
+        delta_value: Number(delta),
+        ...(date === undefined ? {} : { date }),
+        ...(note === undefined ? {} : { note }),
+      },
+    });
+
+    return formatProgressAddSuccessResponse(event);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return PROGRESS_ADD_VALIDATION_HINT;
+    }
+
+    if (error instanceof NotFoundError) {
+      return PROGRESS_ADD_NOT_FOUND_MESSAGE;
+    }
+
+    if (error instanceof AuthError) {
+      return PROGRESS_ADD_AUTH_ERROR_MESSAGE;
+    }
+
+    console.warn('[bot] failed to record progress on /progress_add', error);
+    return PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE;
   }
 }
