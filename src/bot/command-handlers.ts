@@ -1,50 +1,21 @@
 import { InlineKeyboard, type Context } from 'grammy';
 
-import { AuthError, ConflictError, NotFoundError, ValidationError } from '../api/errors';
 import type { components } from '../api/generated/schema';
 import type { AppConfig } from '../config';
+import { mapApiError } from './api-error-handler';
 import { createUserScopedGoalsClient, type CreateBotDependencies } from './goals-client-context';
 import { buildGoalDetailsCallbackData } from './goal-callback-data';
 import { toCommandResponse, type CommandResponse } from './command-response';
 import {
-  GOAL_CREATE_UPSTREAM_FALLBACK_MESSAGE,
-  GOAL_CREATE_VALIDATION_HINT,
-  GOAL_DETAILS_AUTH_ERROR_MESSAGE,
-  GOAL_DETAILS_NOT_FOUND_MESSAGE,
-  GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE,
-  GOAL_EDIT_AUTH_ERROR_MESSAGE,
-  GOAL_EDIT_CONFLICT_MESSAGE,
-  GOAL_EDIT_IMMUTABLE_UNIT_MESSAGE,
-  GOAL_EDIT_NOT_FOUND_MESSAGE,
-  GOAL_EDIT_NOTHING_TO_UPDATE_MESSAGE,
-  GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE,
-  GOAL_EDIT_VALIDATION_HINT,
-  GOALS_LIST_AUTH_ERROR_MESSAGE,
-  GOALS_LIST_EMPTY_MESSAGE,
-  GOALS_LIST_NOT_FOUND_MESSAGE,
-  GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE,
-  PROGRESS_ADD_AUTH_ERROR_MESSAGE,
-  PROGRESS_ADD_NOT_FOUND_MESSAGE,
-  PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE,
-  PROGRESS_ADD_VALIDATION_HINT,
-  PROGRESS_DELETE_AUTH_ERROR_MESSAGE,
-  PROGRESS_DELETE_NOT_FOUND_MESSAGE,
-  PROGRESS_DELETE_SUCCESS_MESSAGE,
-  PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE,
-  PROGRESS_EDIT_AUTH_ERROR_MESSAGE,
-  PROGRESS_EDIT_CONFLICT_MESSAGE,
-  PROGRESS_EDIT_NOT_FOUND_MESSAGE,
-  PROGRESS_EDIT_NOTHING_TO_UPDATE_MESSAGE,
-  PROGRESS_EDIT_UPSTREAM_FALLBACK_MESSAGE,
-  PROGRESS_EDIT_VALIDATION_HINT,
-  PROGRESS_LIST_AUTH_ERROR_MESSAGE,
-  PROGRESS_LIST_EMPTY_MESSAGE,
-  PROGRESS_LIST_NOT_FOUND_MESSAGE,
-  PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE,
-  PROGRESS_LIST_VALIDATION_HINT,
-  START_SUCCESS_MESSAGE,
-  START_TIMEZONE_HINT,
-  START_UPSTREAM_FALLBACK_MESSAGE,
+  goalCreateMessages,
+  goalDetailsMessages,
+  goalEditMessages,
+  goalsListMessages,
+  progressAddMessages,
+  progressDeleteMessages,
+  progressEditMessages,
+  progressListMessages,
+  startMessages,
 } from './messages';
 import {
   formatGoalCreateSuccessResponse,
@@ -86,12 +57,12 @@ export async function handleStartCommand(
   timezone: string | undefined
 ): Promise<string> {
   if (timezone === undefined) {
-    return START_TIMEZONE_HINT;
+    return startMessages.validation;
   }
 
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return START_UPSTREAM_FALLBACK_MESSAGE;
+    return startMessages.fallback;
   }
 
   try {
@@ -102,14 +73,9 @@ export async function handleStartCommand(
       },
     });
 
-    return `${START_SUCCESS_MESSAGE} ${timezone}.`;
+    return `${startMessages.success} ${timezone}.`;
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return START_TIMEZONE_HINT;
-    }
-
-    console.warn('[bot] failed to upsert user on /start', error);
-    return START_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, startMessages);
   }
 }
 
@@ -121,20 +87,20 @@ export async function handleGoalCreateCommand(
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return GOAL_CREATE_UPSTREAM_FALLBACK_MESSAGE;
+    return goalCreateMessages.fallback;
   }
 
   if (title === undefined || unit === undefined || target === undefined || end === undefined) {
-    return GOAL_CREATE_VALIDATION_HINT;
+    return goalCreateMessages.validation;
   }
 
   if (!isGoalUnit(unit)) {
-    return GOAL_CREATE_VALIDATION_HINT;
+    return goalCreateMessages.validation;
   }
 
   const targetValue = Number(target);
   if (!Number.isFinite(targetValue)) {
-    return GOAL_CREATE_VALIDATION_HINT;
+    return goalCreateMessages.validation;
   }
 
   try {
@@ -150,12 +116,7 @@ export async function handleGoalCreateCommand(
 
     return formatGoalCreateSuccessResponse(createdGoal);
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return GOAL_CREATE_VALIDATION_HINT;
-    }
-
-    console.warn('[bot] failed to create goal on /goal_create', error);
-    return GOAL_CREATE_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, goalCreateMessages);
   }
 }
 
@@ -166,29 +127,20 @@ export async function handleGoalsListCommand(
 ): Promise<CommandResponse> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return toCommandResponse(GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE);
+    return toCommandResponse(goalsListMessages.fallback);
   }
 
   try {
     const response = await scopedClient.client.GET('/goals');
     if (response.items.length === 0) {
-      return toCommandResponse(GOALS_LIST_EMPTY_MESSAGE);
+      return toCommandResponse(goalsListMessages.empty);
     }
 
     return toCommandResponse(formatGoalsListResponse(response.items), {
       reply_markup: buildGoalsListKeyboard(response.items),
     });
   } catch (error) {
-    if (error instanceof AuthError) {
-      return toCommandResponse(GOALS_LIST_AUTH_ERROR_MESSAGE);
-    }
-
-    if (error instanceof NotFoundError) {
-      return toCommandResponse(GOALS_LIST_NOT_FOUND_MESSAGE);
-    }
-
-    console.warn('[bot] failed to list goals on /goals', error);
-    return toCommandResponse(GOALS_LIST_UPSTREAM_FALLBACK_MESSAGE);
+    return toCommandResponse(mapApiError(error, goalsListMessages));
   }
 }
 
@@ -200,12 +152,12 @@ export async function handleGoalDetailsCommand(
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE;
+    return goalDetailsMessages.fallback;
   }
 
   const goalId = args.id;
   if (goalId === undefined) {
-    return GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE;
+    return goalDetailsMessages.fallback;
   }
 
   try {
@@ -219,16 +171,7 @@ export async function handleGoalDetailsCommand(
 
     return formatGoalDetailsResponse(response);
   } catch (error) {
-    if (error instanceof AuthError) {
-      return GOAL_DETAILS_AUTH_ERROR_MESSAGE;
-    }
-
-    if (error instanceof NotFoundError) {
-      return GOAL_DETAILS_NOT_FOUND_MESSAGE;
-    }
-
-    console.warn('[bot] failed to get goal details on /goal', error);
-    return GOAL_DETAILS_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, goalDetailsMessages);
   }
 }
 
@@ -240,26 +183,26 @@ export async function handleGoalEditCommand(
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+    return goalEditMessages.fallback;
   }
 
   if (goalId === undefined) {
-    return GOAL_EDIT_VALIDATION_HINT;
+    return goalEditMessages.validation;
   }
 
   if (unit !== undefined) {
-    return GOAL_EDIT_IMMUTABLE_UNIT_MESSAGE;
+    return goalEditMessages.immutableUnit;
   }
 
   if (title === undefined && target === undefined && start === undefined && end === undefined) {
-    return GOAL_EDIT_NOTHING_TO_UPDATE_MESSAGE;
+    return goalEditMessages.nothingToUpdate;
   }
 
   let targetValue: number | undefined;
   if (target !== undefined) {
     const parsedTarget = Number(target);
     if (!Number.isFinite(parsedTarget)) {
-      return GOAL_EDIT_VALIDATION_HINT;
+      return goalEditMessages.validation;
     }
     targetValue = parsedTarget;
   }
@@ -281,24 +224,7 @@ export async function handleGoalEditCommand(
 
     return formatGoalEditSuccessResponse(updatedGoal);
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return GOAL_EDIT_VALIDATION_HINT;
-    }
-
-    if (error instanceof ConflictError) {
-      return GOAL_EDIT_CONFLICT_MESSAGE;
-    }
-
-    if (error instanceof NotFoundError) {
-      return GOAL_EDIT_NOT_FOUND_MESSAGE;
-    }
-
-    if (error instanceof AuthError) {
-      return GOAL_EDIT_AUTH_ERROR_MESSAGE;
-    }
-
-    console.warn('[bot] failed to edit goal on /goal_edit', error);
-    return GOAL_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, goalEditMessages);
   }
 }
 
@@ -310,11 +236,11 @@ export async function handleProgressAddCommand(
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE;
+    return progressAddMessages.fallback;
   }
 
   if (goalId === undefined || delta === undefined) {
-    return PROGRESS_ADD_VALIDATION_HINT;
+    return progressAddMessages.validation;
   }
 
   try {
@@ -333,20 +259,7 @@ export async function handleProgressAddCommand(
 
     return formatProgressAddSuccessResponse(event);
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return PROGRESS_ADD_VALIDATION_HINT;
-    }
-
-    if (error instanceof NotFoundError) {
-      return PROGRESS_ADD_NOT_FOUND_MESSAGE;
-    }
-
-    if (error instanceof AuthError) {
-      return PROGRESS_ADD_AUTH_ERROR_MESSAGE;
-    }
-
-    console.warn('[bot] failed to record progress on /progress_add', error);
-    return PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, progressAddMessages);
   }
 }
 
@@ -358,15 +271,15 @@ export async function handleProgressListCommand(
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE;
+    return progressListMessages.fallback;
   }
 
   if (goalId === undefined) {
-    return PROGRESS_LIST_VALIDATION_HINT;
+    return progressListMessages.validation;
   }
 
   if (sort !== undefined && !isSortDirection(sort)) {
-    return PROGRESS_LIST_VALIDATION_HINT;
+    return progressListMessages.validation;
   }
 
   try {
@@ -384,25 +297,12 @@ export async function handleProgressListCommand(
     });
 
     if (result.items.length === 0) {
-      return PROGRESS_LIST_EMPTY_MESSAGE;
+      return progressListMessages.empty;
     }
 
     return formatProgressListResponse(result.items);
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return PROGRESS_LIST_VALIDATION_HINT;
-    }
-
-    if (error instanceof NotFoundError) {
-      return PROGRESS_LIST_NOT_FOUND_MESSAGE;
-    }
-
-    if (error instanceof AuthError) {
-      return PROGRESS_LIST_AUTH_ERROR_MESSAGE;
-    }
-
-    console.warn('[bot] failed to list progress on /progress_list', error);
-    return PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, progressListMessages);
   }
 }
 
@@ -414,22 +314,22 @@ export async function handleProgressEditCommand(
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return PROGRESS_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+    return progressEditMessages.fallback;
   }
 
   if (goalId === undefined || eventId === undefined) {
-    return PROGRESS_EDIT_VALIDATION_HINT;
+    return progressEditMessages.validation;
   }
 
   if (delta === undefined && date === undefined && note === undefined) {
-    return PROGRESS_EDIT_NOTHING_TO_UPDATE_MESSAGE;
+    return progressEditMessages.nothingToUpdate;
   }
 
   let deltaValue: number | undefined;
   if (delta !== undefined) {
     const parsedDelta = Number(delta);
     if (!Number.isFinite(parsedDelta)) {
-      return PROGRESS_EDIT_VALIDATION_HINT;
+      return progressEditMessages.validation;
     }
     deltaValue = parsedDelta;
   }
@@ -451,24 +351,7 @@ export async function handleProgressEditCommand(
 
     return formatProgressEditSuccessResponse(updatedEvent);
   } catch (error) {
-    if (error instanceof ValidationError) {
-      return PROGRESS_EDIT_VALIDATION_HINT;
-    }
-
-    if (error instanceof ConflictError) {
-      return PROGRESS_EDIT_CONFLICT_MESSAGE;
-    }
-
-    if (error instanceof NotFoundError) {
-      return PROGRESS_EDIT_NOT_FOUND_MESSAGE;
-    }
-
-    if (error instanceof AuthError) {
-      return PROGRESS_EDIT_AUTH_ERROR_MESSAGE;
-    }
-
-    console.warn('[bot] failed to edit progress on /progress_edit', error);
-    return PROGRESS_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, progressEditMessages);
   }
 }
 
@@ -480,11 +363,11 @@ export async function handleProgressDeleteCommand(
 ): Promise<string> {
   const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
   if (scopedClient === null) {
-    return PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE;
+    return progressDeleteMessages.fallback;
   }
 
   if (goalId === undefined || eventId === undefined || confirm !== 'yes') {
-    return PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE;
+    return progressDeleteMessages.fallback;
   }
 
   try {
@@ -497,17 +380,8 @@ export async function handleProgressDeleteCommand(
       },
     });
 
-    return PROGRESS_DELETE_SUCCESS_MESSAGE;
+    return progressDeleteMessages.success;
   } catch (error) {
-    if (error instanceof NotFoundError) {
-      return PROGRESS_DELETE_NOT_FOUND_MESSAGE;
-    }
-
-    if (error instanceof AuthError) {
-      return PROGRESS_DELETE_AUTH_ERROR_MESSAGE;
-    }
-
-    console.warn('[bot] failed to delete progress on /progress_delete', error);
-    return PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE;
+    return mapApiError(error, progressDeleteMessages);
   }
 }
