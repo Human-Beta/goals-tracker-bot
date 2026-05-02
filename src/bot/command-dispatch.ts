@@ -16,7 +16,7 @@ import {
 } from './command-handlers';
 import { parseGoalDetailsCallbackData } from './goal-callback-data';
 import type { CreateBotDependencies } from './goals-client-context';
-import { START_TIMEZONE_HINT } from './messages';
+import { startMessages } from './messages';
 import { formatInvalidCommandMessage, routeTextMessage } from './router';
 
 export async function resolveCommandResponse(
@@ -32,7 +32,7 @@ export async function resolveCommandResponse(
     case 'invalid_command':
       switch (parsedCommand.commandName) {
         case 'start':
-          response = toCommandResponse(START_TIMEZONE_HINT);
+          response = toCommandResponse(startMessages.validation);
           break;
         case 'goal_create':
         case 'goal':

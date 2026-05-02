@@ -1,9 +1,5 @@
 import type { components } from '../api/generated/schema';
-import {
-  formatProgressListTruncatedNotice,
-  GOAL_DETAILS_ETA_NULL_EXPLANATION,
-  PROGRESS_LIST_DISPLAY_LIMIT,
-} from './messages';
+import { formatProgressListTruncatedNotice, goalDetailsMessages, PROGRESS_LIST_DISPLAY_LIMIT } from './messages';
 
 type GoalBase = components['schemas']['GoalBase'];
 type GoalListItem = components['schemas']['GoalListItem'];
@@ -132,7 +128,7 @@ export function formatGoalDetailsResponse(goal: GoalDetail): string {
     goal.eta_date === null
       ? ([
           ['eta_date', 'null'],
-          ['eta_note', GOAL_DETAILS_ETA_NULL_EXPLANATION],
+          ['eta_note', goalDetailsMessages.etaNullExplanation],
         ] as const)
       : ([['eta_date', goal.eta_date]] as const);
 
