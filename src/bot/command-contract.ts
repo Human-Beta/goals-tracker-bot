@@ -165,7 +165,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
       date: dateValidator,
       note: nonEmptyTextValidator,
     },
-    implemented: false,
+    implemented: true,
   },
   progress_delete: {
     name: 'progress_delete',
@@ -177,7 +177,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
       event: uuidValidator,
       confirm: yesValidator,
     },
-    implemented: false,
+    implemented: true,
   },
   ping: {
     name: 'ping',

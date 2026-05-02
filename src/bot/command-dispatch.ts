@@ -9,6 +9,8 @@ import {
   handleGoalEditCommand,
   handleGoalsListCommand,
   handleProgressAddCommand,
+  handleProgressDeleteCommand,
+  handleProgressEditCommand,
   handleProgressListCommand,
   handleStartCommand,
 } from './command-handlers';
@@ -37,6 +39,8 @@ export async function resolveCommandResponse(
         case 'goal_edit':
         case 'progress_add':
         case 'progress_list':
+        case 'progress_edit':
+        case 'progress_delete':
           response = toCommandResponse(formatInvalidCommandMessage(parsedCommand.reason, parsedCommand.usage));
           break;
         default:
@@ -76,6 +80,16 @@ export async function resolveCommandResponse(
         case 'progress_list':
           response = toCommandResponse(
             await handleProgressListCommand(ctx, config, dependencies, parsedCommand.command.args)
+          );
+          break;
+        case 'progress_edit':
+          response = toCommandResponse(
+            await handleProgressEditCommand(ctx, config, dependencies, parsedCommand.command.args)
+          );
+          break;
+        case 'progress_delete':
+          response = toCommandResponse(
+            await handleProgressDeleteCommand(ctx, config, dependencies, parsedCommand.command.args)
           );
           break;
         default:

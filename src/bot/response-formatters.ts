@@ -87,6 +87,21 @@ export function formatProgressAddSuccessResponse(event: ProgressEvent): string {
   ].join('\n');
 }
 
+export function formatProgressEditSuccessResponse(event: ProgressEvent): string {
+  const rows: Array<readonly [label: string, value: string | number]> = [
+    ['id', event.id],
+    ['goal_id', event.goal_id],
+    ['date', event.date],
+    ['delta_value', event.delta_value],
+  ];
+
+  if (typeof event.note === 'string' && event.note.length > 0) {
+    rows.push(['note', event.note]);
+  }
+
+  return ['Progress event updated:', formatLabelValueLines(rows)].join('\n');
+}
+
 export function formatProgressListResponse(items: ProgressEvent[]): string {
   const visibleItems = items.slice(0, PROGRESS_LIST_DISPLAY_LIMIT);
   const formattedItems = visibleItems.map(item => {
