@@ -1,4 +1,4 @@
-import { UUID_PATTERN } from '../shared/patterns';
+import { UUID_PATTERN } from '../../shared/patterns';
 
 export type CommandName =
   | 'start'

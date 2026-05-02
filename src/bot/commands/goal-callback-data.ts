@@ -1,4 +1,4 @@
-import { UUID_PATTERN } from '../shared/patterns';
+import { UUID_PATTERN } from '../../shared/patterns';
 
 const GOAL_DETAILS_CALLBACK_PREFIX = 'goal_details:';
 

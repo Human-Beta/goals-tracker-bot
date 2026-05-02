@@ -1,8 +1,8 @@
 import { Bot, type Context } from 'grammy';
 
 import type { AppConfig } from '../config';
-import { parseCommandText } from './command-parser';
-import { resolveCallbackQueryResponse, resolveCommandResponse } from './command-dispatch';
+import { parseCommandText } from './commands/command-parser';
+import { resolveCallbackQueryResponse, resolveCommandResponse } from './commands/command-dispatch';
 import type { CreateBotDependencies } from './goals-client-context';
 
 export function createBot(config: AppConfig, dependencies: CreateBotDependencies = {}): Bot<Context> {

@@ -1,6 +1,6 @@
 import type { Context } from 'grammy';
 
-import type { AppConfig } from '../config';
+import type { AppConfig } from '../../config';
 import type { CommandParseResult } from './command-parser';
 import { toCommandResponse, type CommandResponse } from './command-response';
 import {
@@ -15,9 +15,9 @@ import {
   handleStartCommand,
 } from './command-handlers';
 import { parseGoalDetailsCallbackData } from './goal-callback-data';
-import type { CreateBotDependencies } from './goals-client-context';
-import { startMessages } from './messages';
-import { formatInvalidCommandMessage, routeTextMessage } from './router';
+import type { CreateBotDependencies } from '../goals-client-context';
+import { startMessages } from '../presentation/messages';
+import { formatInvalidCommandMessage, routeTextMessage } from '../router';
 
 export async function resolveCommandResponse(
   ctx: Context,

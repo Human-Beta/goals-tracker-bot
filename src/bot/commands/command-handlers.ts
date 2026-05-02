@@ -1,9 +1,9 @@
 import { InlineKeyboard, type Context } from 'grammy';
 
-import type { components } from '../api/generated/schema';
-import type { AppConfig } from '../config';
-import { mapApiError } from './api-error-handler';
-import { createUserScopedGoalsClient, type CreateBotDependencies } from './goals-client-context';
+import type { components } from '../../api/generated/schema';
+import type { AppConfig } from '../../config';
+import { mapApiError } from '../presentation/api-error-handler';
+import { createUserScopedGoalsClient, type CreateBotDependencies } from '../goals-client-context';
 import { buildGoalDetailsCallbackData } from './goal-callback-data';
 import { toCommandResponse, type CommandResponse } from './command-response';
 import {
@@ -16,7 +16,7 @@ import {
   progressEditMessages,
   progressListMessages,
   startMessages,
-} from './messages';
+} from '../presentation/messages';
 import {
   formatGoalCreateSuccessResponse,
   formatGoalDetailsResponse,
@@ -26,7 +26,7 @@ import {
   formatProgressAddSuccessResponse,
   formatProgressEditSuccessResponse,
   formatProgressListResponse,
-} from './response-formatters';
+} from '../presentation/response-formatters';
 
 type GoalUnit = components['schemas']['GoalUnit'];
 type GoalListItem = components['schemas']['GoalListItem'];
