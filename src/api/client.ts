@@ -2,10 +2,23 @@ import * as crypto from 'node:crypto';
 
 import createClient, { type ClientOptions, type Middleware } from 'openapi-fetch';
 
-import { normalizeApiError } from './errors';
+import { normalizeApiError, TransientUpstreamError } from './errors';
 import type { paths } from './generated/schema';
 
 export const CORRELATION_ID_HEADER = 'X-Correlation-Id';
+
+const DEFAULT_RETRY_MAX_ATTEMPTS = 3;
+const DEFAULT_RETRY_BASE_DELAY_MS = 100;
+
+export type RetryOptions = {
+  maxAttempts?: number;
+  baseDelayMs?: number;
+};
+
+type ResolvedRetryOptions = {
+  maxAttempts: number;
+  baseDelayMs: number;
+};
 
 type ApiMethod = 'get' | 'put' | 'post' | 'delete' | 'options' | 'head' | 'patch' | 'trace';
 type ParamGroup = 'query' | 'header' | 'path' | 'cookie';
@@ -118,6 +131,7 @@ export type CreateGoalsApiClientOptions = {
   correlationId?: string;
   fetch?: GoalsApiFetch;
   timeoutMs?: number;
+  retry?: RetryOptions;
 };
 
 export interface GoalsApiClient {
@@ -215,9 +229,81 @@ function normalizeMethod(method: ApiMethod): string {
   return method.toUpperCase();
 }
 
+function resolveRetryOptions(input: RetryOptions | undefined): ResolvedRetryOptions {
+  const rawMaxAttempts = input?.maxAttempts;
+  const maxAttempts =
+    typeof rawMaxAttempts === 'number' && Number.isInteger(rawMaxAttempts) && rawMaxAttempts >= 1
+      ? rawMaxAttempts
+      : DEFAULT_RETRY_MAX_ATTEMPTS;
+
+  const rawBaseDelayMs = input?.baseDelayMs;
+  const baseDelayMs =
+    typeof rawBaseDelayMs === 'number' && Number.isFinite(rawBaseDelayMs) && rawBaseDelayMs >= 0
+      ? rawBaseDelayMs
+      : DEFAULT_RETRY_BASE_DELAY_MS;
+
+  return { maxAttempts, baseDelayMs };
+}
+
+function delay(ms: number): Promise<void> {
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
+}
+
+type RetryContext = {
+  method: string;
+  path: string;
+  signal?: AbortSignal | null;
+};
+
+async function executeWithRetry<T>(
+  invocation: (attempt: number) => Promise<T>,
+  context: RetryContext,
+  retry: ResolvedRetryOptions
+): Promise<T> {
+  let attempt = 1;
+
+  while (true) {
+    try {
+      return await invocation(attempt);
+    } catch (error) {
+      if (!(error instanceof TransientUpstreamError)) {
+        throw error;
+      }
+
+      if (attempt >= retry.maxAttempts) {
+        throw error;
+      }
+
+      if (context.signal?.aborted) {
+        throw error;
+      }
+
+      const nextDelayMs = retry.baseDelayMs * 2 ** (attempt - 1);
+      console.warn('[api] retrying transient failure', {
+        method: context.method,
+        path: context.path,
+        attempt,
+        nextDelayMs,
+        errorName: error.name,
+        status: error.status,
+      });
+
+      await delay(nextDelayMs);
+      attempt += 1;
+    }
+  }
+}
+
 export function createGoalsApiClient(options: CreateGoalsApiClientOptions): GoalsApiClient {
   const correlationId = resolveCorrelationId(options.correlationId);
   const fetchImpl = withTimeout(resolveFetch(options.fetch), options.timeoutMs);
+  const retry = resolveRetryOptions(options.retry);
 
   const client = createClient<paths>({
     baseUrl: options.baseUrl,
@@ -253,24 +339,33 @@ export function createGoalsApiClient(options: CreateGoalsApiClientOptions): Goal
     init?: RequestOptionsFor<Path, Method>
   ): Promise<OperationData<OperationFor<Path, Method>>> {
     const normalizedMethod = normalizeMethod(method);
-    const result = await invokeRequest(method, String(path), init).catch(error => {
-      throw normalizeApiError({
-        error,
-        method: normalizedMethod,
-        path: String(path),
-      });
-    });
+    const pathString = String(path);
+    const callerSignal = init?.signal ?? null;
 
-    if (result.error !== undefined) {
-      throw normalizeApiError({
-        status: result.response.status,
-        error: result.error,
-        method: normalizedMethod,
-        path: String(path),
-      });
-    }
+    return executeWithRetry(
+      async () => {
+        const result = await invokeRequest(method, pathString, init).catch(error => {
+          throw normalizeApiError({
+            error,
+            method: normalizedMethod,
+            path: pathString,
+          });
+        });
 
-    return result.data as OperationData<OperationFor<Path, Method>>;
+        if (result.error !== undefined) {
+          throw normalizeApiError({
+            status: result.response.status,
+            error: result.error,
+            method: normalizedMethod,
+            path: pathString,
+          });
+        }
+
+        return result.data as OperationData<OperationFor<Path, Method>>;
+      },
+      { method: normalizedMethod, path: pathString, signal: callerSignal },
+      retry
+    );
   }
 
   return {

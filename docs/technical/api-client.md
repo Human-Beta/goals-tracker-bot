@@ -51,6 +51,14 @@ Map transport + HTTP failures into a bot-internal error model:
 
 This normalization is used by command handlers to produce user-facing text.
 
+## Retry policy
+
+- Retry only `TransientUpstreamError` (timeout, network failure, 5xx). Never retry `400`, `401`, `404`, `409`.
+- Up to 3 attempts (1 initial + 2 retries). Fixed exponential backoff: 100 ms then 200 ms.
+- All HTTP methods are retried, including mutations. The duplicate-effect risk on retried `POST`/`PATCH`/`DELETE` is accepted at MVP; the API returns `409` on duplicates which renders as a user-friendly conflict message.
+- Each retry attempt is logged via `console.warn('[api] retrying transient failure', { method, path, attempt, nextDelayMs, errorName, status })`.
+- Defaults are module-level constants in `src/api/client.ts`. They can be overridden per client instance via the `retry` option on `createGoalsApiClient` (used by tests). No env-var configuration is provided at MVP.
+
 ## Notes for openapi-fetch usage
 
 - Prefer endpoint calls typed by path/method instead of custom ad-hoc request builders.

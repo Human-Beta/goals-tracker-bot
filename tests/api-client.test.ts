@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CORRELATION_ID_HEADER, createGoalsApiClient, type GoalsApiFetch } from '../src/api/client';
+import { AuthError, ConflictError, NotFoundError, TransientUpstreamError, ValidationError } from '../src/api/errors';
 import { UUID_PATTERN } from '../src/shared/patterns';
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -64,5 +65,155 @@ describe('createGoalsApiClient middleware', () => {
     expect(requests).toHaveLength(1);
     const correlationId = requests[0].headers.get(CORRELATION_ID_HEADER);
     expect(correlationId).toMatch(UUID_PATTERN);
+  });
+});
+
+type FetchOutcome = Response | Error;
+
+function makeQueuedFetch(queue: FetchOutcome[]): { fetchMock: GoalsApiFetch; requests: Request[] } {
+  const requests: Request[] = [];
+  const fetchMock: GoalsApiFetch = async input => {
+    requests.push(input as Request);
+    const next = queue.shift();
+    if (next === undefined) {
+      throw new Error('queued fetch is exhausted');
+    }
+    if (next instanceof Error) {
+      throw next;
+    }
+    return next;
+  };
+  return { fetchMock, requests };
+}
+
+function buildRetryClient(fetchMock: GoalsApiFetch, overrides: { maxAttempts?: number } = {}) {
+  return createGoalsApiClient({
+    baseUrl: 'https://api.example.com',
+    serviceToken: 'service-token',
+    telegramUserId: 42,
+    correlationId: 'retry-test',
+    fetch: fetchMock,
+    retry: {
+      baseDelayMs: 0,
+      ...(overrides.maxAttempts === undefined ? {} : { maxAttempts: overrides.maxAttempts }),
+    },
+  });
+}
+
+describe('createGoalsApiClient retry', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('retries on consecutive 5xx then succeeds', async () => {
+    const { fetchMock, requests } = makeQueuedFetch([
+      jsonResponse({ code: 'internal_error' }, 500),
+      jsonResponse({ code: 'internal_error' }, 503),
+      jsonResponse({ items: [] }, 200),
+    ]);
+
+    const data = await buildRetryClient(fetchMock).GET('/goals');
+
+    expect(requests).toHaveLength(3);
+    expect(data).toEqual({ items: [] });
+  });
+
+  it('retries on single 500 then succeeds', async () => {
+    const { fetchMock, requests } = makeQueuedFetch([
+      jsonResponse({ code: 'internal_error' }, 500),
+      jsonResponse({ items: [] }, 200),
+    ]);
+
+    const data = await buildRetryClient(fetchMock).GET('/goals');
+
+    expect(requests).toHaveLength(2);
+    expect(data).toEqual({ items: [] });
+  });
+
+  it('retries on AbortError then succeeds', async () => {
+    const { fetchMock, requests } = makeQueuedFetch([
+      new DOMException('The operation was aborted', 'AbortError'),
+      jsonResponse({ items: [] }, 200),
+    ]);
+
+    const data = await buildRetryClient(fetchMock).GET('/goals');
+
+    expect(requests).toHaveLength(2);
+    expect(data).toEqual({ items: [] });
+  });
+
+  it('retries on TypeError network failure then succeeds', async () => {
+    const { fetchMock, requests } = makeQueuedFetch([new TypeError('fetch failed'), jsonResponse({ items: [] }, 200)]);
+
+    const data = await buildRetryClient(fetchMock).GET('/goals');
+
+    expect(requests).toHaveLength(2);
+    expect(data).toEqual({ items: [] });
+  });
+
+  it('exhausts retries and throws TransientUpstreamError after 3 5xx responses', async () => {
+    const { fetchMock, requests } = makeQueuedFetch([
+      jsonResponse({ code: 'internal_error' }, 500),
+      jsonResponse({ code: 'internal_error' }, 502),
+      jsonResponse({ code: 'internal_error' }, 503),
+    ]);
+
+    await expect(buildRetryClient(fetchMock).GET('/goals')).rejects.toMatchObject({
+      name: 'TransientUpstreamError',
+      status: 503,
+    });
+    expect(requests).toHaveLength(3);
+  });
+
+  it.each([
+    { status: 400, expected: ValidationError },
+    { status: 401, expected: AuthError },
+    { status: 404, expected: NotFoundError },
+    { status: 409, expected: ConflictError },
+  ])('does not retry on status $status', async ({ status, expected }) => {
+    const { fetchMock, requests } = makeQueuedFetch([
+      jsonResponse({ code: 'permanent_error', message: `status-${status}` }, status),
+    ]);
+
+    await expect(buildRetryClient(fetchMock).GET('/goals')).rejects.toBeInstanceOf(expected);
+    expect(requests).toHaveLength(1);
+  });
+
+  it('logs retry attempts via console.warn', async () => {
+    const { fetchMock } = makeQueuedFetch([
+      jsonResponse({ code: 'internal_error' }, 500),
+      jsonResponse({ items: [] }, 200),
+    ]);
+
+    await buildRetryClient(fetchMock).GET('/goals');
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[api] retrying transient failure',
+      expect.objectContaining({
+        method: 'GET',
+        path: '/goals',
+        attempt: 1,
+        nextDelayMs: 0,
+      })
+    );
+  });
+
+  it('respects custom maxAttempts override', async () => {
+    const { fetchMock, requests } = makeQueuedFetch([
+      jsonResponse({ code: 'internal_error' }, 500),
+      jsonResponse({ code: 'internal_error' }, 500),
+    ]);
+
+    await expect(buildRetryClient(fetchMock, { maxAttempts: 2 }).GET('/goals')).rejects.toBeInstanceOf(
+      TransientUpstreamError
+    );
+    expect(requests).toHaveLength(2);
   });
 });
