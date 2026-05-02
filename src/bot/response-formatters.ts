@@ -4,6 +4,7 @@ import { GOAL_DETAILS_ETA_NULL_EXPLANATION } from './messages';
 type GoalBase = components['schemas']['GoalBase'];
 type GoalListItem = components['schemas']['GoalListItem'];
 type GoalDetail = components['schemas']['GoalDetail'];
+type ProgressEvent = components['schemas']['ProgressEvent'];
 
 function formatLabelValueLines(lines: ReadonlyArray<readonly [label: string, value: string | number]>): string {
   return lines.map(([label, value]) => `${label}: ${value}`).join('\n');
@@ -68,6 +69,18 @@ export function formatGoalsListResponse(items: GoalListItem[]): string {
   );
 
   return formattedItems.join('\n\n');
+}
+
+export function formatProgressAddSuccessResponse(event: ProgressEvent): string {
+  return [
+    'Progress recorded:',
+    formatLabelValueLines([
+      ['id', event.id],
+      ['goal_id', event.goal_id],
+      ['date', event.date],
+      ['delta_value', event.delta_value],
+    ]),
+  ].join('\n');
 }
 
 export function formatGoalDetailsResponse(goal: GoalDetail): string {

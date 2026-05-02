@@ -32,6 +32,8 @@ const GOAL_EDIT_IMMUTABLE_UNIT_MESSAGE =
   'Goal unit cannot be changed after the goal is created. Create a new goal with /goal_create to use a different unit.';
 const GOAL_EDIT_CONFLICT_MESSAGE =
   'Could not apply this update because it conflicts with the goal state (for example, target below current progress). Please review the values and try again.';
+const PROGRESS_ADD_NOT_FOUND_MESSAGE = 'Goal not found. Run /goals to check available goal IDs and try again.';
+const PROGRESS_EVENT_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
 type GoalDetail = components['schemas']['GoalDetail'];
 type SendMessagePayload = {
@@ -1428,6 +1430,206 @@ describe('bot update handling', () => {
     expect(sendMessageCall?.payload).toMatchObject({
       chat_id: 12345,
       text: GOALS_LIST_NOT_FOUND_MESSAGE,
+    });
+  });
+
+  it('handles /progress_add by calling POST /goals/{goalId}/progress and returning event details', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsRequests: Request[] = [];
+
+    const goalsApiFetch: GoalsApiFetch = async (input, init) => {
+      const request = toRequest(input, init);
+      goalsRequests.push(request);
+      return jsonResponse(
+        {
+          id: PROGRESS_EVENT_ID,
+          goal_id: GOAL_DETAILS_ID,
+          date: '2026-05-02',
+          delta_value: 2.5,
+          note: 'ran 5k',
+          created_at: '2026-05-02T12:00:00.000Z',
+          updated_at: '2026-05-02T12:00:00.000Z',
+        },
+        201
+      );
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 17,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(`/progress_add goal=${GOAL_DETAILS_ID} delta=2.5 date=2026-05-02 note="ran 5k"`);
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    expect(goalsRequests).toHaveLength(1);
+    const request = goalsRequests[0];
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe(`/goals/${GOAL_DETAILS_ID}/progress`);
+    expect(request.headers.get('Authorization')).toBe('Bearer service-token');
+    expect(request.headers.get('X-Telegram-User-Id')).toBe('12345');
+    expect(await request.clone().json()).toEqual({
+      delta_value: 2.5,
+      date: '2026-05-02',
+      note: 'ran 5k',
+    });
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('Progress recorded:');
+    expect(sendMessagePayload.text).toContain(`id: ${PROGRESS_EVENT_ID}`);
+    expect(sendMessagePayload.text).toContain('delta_value: 2.5');
+  });
+
+  it('returns format validation message and does not call API for invalid /progress_add payload', async () => {
+    const apiCalls: ApiCall[] = [];
+    let didCallGoalsApi = false;
+
+    const goalsApiFetch: GoalsApiFetch = async () => {
+      didCallGoalsApi = true;
+      return jsonResponse({});
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 18,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(`/progress_add goal=${GOAL_DETAILS_ID} delta=abc`);
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    expect(didCallGoalsApi).toBe(false);
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('Invalid command format');
+    expect(sendMessagePayload.text).toContain('argument "delta" must be a valid number');
+    expect(sendMessagePayload.text).toContain('/progress_add goal=<uuid> delta=<number>');
+  });
+
+  it('returns not-found message when /progress_add fails with 404', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsApiFetch: GoalsApiFetch = async () =>
+      jsonResponse(
+        {
+          code: 'goal_not_found',
+          message: 'goal not found',
+        },
+        404
+      );
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 19,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(`/progress_add goal=${GOAL_DETAILS_ID} delta=1`);
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    expect(sendMessageCall?.payload).toMatchObject({
+      chat_id: 12345,
+      text: PROGRESS_ADD_NOT_FOUND_MESSAGE,
     });
   });
 });
