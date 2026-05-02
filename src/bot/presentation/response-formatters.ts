@@ -91,7 +91,7 @@ export function formatProgressEditSuccessResponse(event: ProgressEvent): string 
     ['delta_value', event.delta_value],
   ];
 
-  if (typeof event.note === 'string' && event.note.length > 0) {
+  if (event.note != null && event.note.length > 0) {
     rows.push(['note', event.note]);
   }
 
@@ -107,7 +107,7 @@ export function formatProgressListResponse(items: ProgressEvent[]): string {
       ['delta_value', item.delta_value],
     ];
 
-    if (typeof item.note === 'string' && item.note.length > 0) {
+    if (item.note != null && item.note.length > 0) {
       rows.push(['note', item.note]);
     }
 
