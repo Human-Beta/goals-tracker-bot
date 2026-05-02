@@ -8,7 +8,7 @@ const requiredString = (fieldName: string) =>
     .string()
     .optional()
     .transform((value, ctx) => {
-      if (typeof value !== 'string' || value.trim().length === 0) {
+      if (value === undefined || value.trim().length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `${fieldName} is required`,

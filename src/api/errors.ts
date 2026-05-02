@@ -103,7 +103,7 @@ function getStringProperty(error: unknown, key: string): string | undefined {
 }
 
 function getUpstreamMessage(error: unknown): string | undefined {
-  if (error instanceof Error && typeof error.message === 'string' && error.message.length > 0) {
+  if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
 

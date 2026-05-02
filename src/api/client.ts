@@ -183,7 +183,7 @@ export interface GoalsApiClient {
 }
 
 function resolveCorrelationId(value: string | undefined): string {
-  if (typeof value === 'string' && value.trim().length > 0) {
+  if (value !== undefined && value.trim().length > 0) {
     return value.trim();
   }
 
@@ -232,13 +232,13 @@ function normalizeMethod(method: ApiMethod): string {
 function resolveRetryOptions(input: RetryOptions | undefined): ResolvedRetryOptions {
   const rawMaxAttempts = input?.maxAttempts;
   const maxAttempts =
-    typeof rawMaxAttempts === 'number' && Number.isInteger(rawMaxAttempts) && rawMaxAttempts >= 1
+    rawMaxAttempts !== undefined && Number.isInteger(rawMaxAttempts) && rawMaxAttempts >= 1
       ? rawMaxAttempts
       : DEFAULT_RETRY_MAX_ATTEMPTS;
 
   const rawBaseDelayMs = input?.baseDelayMs;
   const baseDelayMs =
-    typeof rawBaseDelayMs === 'number' && Number.isFinite(rawBaseDelayMs) && rawBaseDelayMs >= 0
+    rawBaseDelayMs !== undefined && Number.isFinite(rawBaseDelayMs) && rawBaseDelayMs >= 0
       ? rawBaseDelayMs
       : DEFAULT_RETRY_BASE_DELAY_MS;
 
