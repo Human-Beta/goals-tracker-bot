@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCommandText } from '../src/bot/command-parser';
-import { KeyValueParseError, parseKeyValueArgs } from '../src/bot/key-value-parser';
+import { parseCommandText } from '../src/bot/commands/command-parser';
+import { KeyValueParseError, parseKeyValueArgs } from '../src/bot/commands/key-value-parser';
 
 const UUID_A = '11111111-1111-4111-8111-111111111111';
 const UUID_B = '22222222-2222-4222-8222-222222222222';

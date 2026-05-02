@@ -1,4 +1,4 @@
-import type { components } from '../api/generated/schema';
+import type { components } from '../../api/generated/schema';
 import { formatProgressListTruncatedNotice, goalDetailsMessages, PROGRESS_LIST_DISPLAY_LIMIT } from './messages';
 
 type GoalBase = components['schemas']['GoalBase'];

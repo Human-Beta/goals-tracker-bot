@@ -1,4 +1,4 @@
-import { parseCommandText } from './command-parser';
+import { parseCommandText } from './commands/command-parser';
 
 export const PING_RESPONSE = 'pong';
 export const KNOWN_COMMAND_NOT_IMPLEMENTED_RESPONSE = 'Command is recognized but not implemented yet.';

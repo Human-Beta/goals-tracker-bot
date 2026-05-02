@@ -1,4 +1,4 @@
-import { AuthError, ConflictError, NotFoundError, ValidationError } from '../api/errors';
+import { AuthError, ConflictError, NotFoundError, ValidationError } from '../../api/errors';
 
 export type ApiErrorMessages = {
   validation?: string;
