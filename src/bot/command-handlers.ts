@@ -27,6 +27,11 @@ import {
   PROGRESS_ADD_NOT_FOUND_MESSAGE,
   PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE,
   PROGRESS_ADD_VALIDATION_HINT,
+  PROGRESS_LIST_AUTH_ERROR_MESSAGE,
+  PROGRESS_LIST_EMPTY_MESSAGE,
+  PROGRESS_LIST_NOT_FOUND_MESSAGE,
+  PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE,
+  PROGRESS_LIST_VALIDATION_HINT,
   START_SUCCESS_MESSAGE,
   START_TIMEZONE_HINT,
   START_UPSTREAM_FALLBACK_MESSAGE,
@@ -38,14 +43,21 @@ import {
   formatGoalsListResponse,
   formatGoalTitleCommandLabel,
   formatProgressAddSuccessResponse,
+  formatProgressListResponse,
 } from './response-formatters';
 
 type GoalUnit = components['schemas']['GoalUnit'];
 type GoalListItem = components['schemas']['GoalListItem'];
+type SortDirection = 'asc' | 'desc';
 const GOAL_UNITS: ReadonlySet<GoalUnit> = new Set(['pages', 'minutes', 'km']);
+const SORT_DIRECTIONS: ReadonlySet<SortDirection> = new Set(['asc', 'desc']);
 
 function isGoalUnit(value: string): value is GoalUnit {
   return GOAL_UNITS.has(value as GoalUnit);
+}
+
+function isSortDirection(value: string): value is SortDirection {
+  return SORT_DIRECTIONS.has(value as SortDirection);
 }
 
 function buildGoalsListKeyboard(items: GoalListItem[]): InlineKeyboard {
@@ -324,5 +336,61 @@ export async function handleProgressAddCommand(
 
     console.warn('[bot] failed to record progress on /progress_add', error);
     return PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE;
+  }
+}
+
+export async function handleProgressListCommand(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  { goal: goalId, from, to, sort }: Readonly<Record<string, string>>
+): Promise<string> {
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  if (scopedClient === null) {
+    return PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  if (goalId === undefined) {
+    return PROGRESS_LIST_VALIDATION_HINT;
+  }
+
+  if (sort !== undefined && !isSortDirection(sort)) {
+    return PROGRESS_LIST_VALIDATION_HINT;
+  }
+
+  try {
+    const result = await scopedClient.client.GET('/goals/{goalId}/progress', {
+      params: {
+        path: {
+          goalId,
+        },
+        query: {
+          ...(from === undefined ? {} : { from }),
+          ...(to === undefined ? {} : { to }),
+          ...(sort === undefined ? {} : { sort }),
+        },
+      },
+    });
+
+    if (result.items.length === 0) {
+      return PROGRESS_LIST_EMPTY_MESSAGE;
+    }
+
+    return formatProgressListResponse(result.items);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return PROGRESS_LIST_VALIDATION_HINT;
+    }
+
+    if (error instanceof NotFoundError) {
+      return PROGRESS_LIST_NOT_FOUND_MESSAGE;
+    }
+
+    if (error instanceof AuthError) {
+      return PROGRESS_LIST_AUTH_ERROR_MESSAGE;
+    }
+
+    console.warn('[bot] failed to list progress on /progress_list', error);
+    return PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE;
   }
 }

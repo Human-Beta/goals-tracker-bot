@@ -37,7 +37,9 @@ type PathParameters<Path extends PathKey> = paths[Path] extends { parameters: in
 
 type OperationParameters<Operation> = Operation extends { parameters: infer Parameters } ? Parameters : never;
 
-type ParamValue<Parameters, Group extends ParamGroup> = Parameters extends Record<Group, infer Value> ? Value : never;
+type ParamValue<Parameters, Group extends ParamGroup> = Parameters extends { [K in Group]?: infer Value }
+  ? Exclude<Value, undefined>
+  : never;
 
 type MergeParamValue<PathValue, OperationValue> = [OperationValue] extends [never]
   ? PathValue

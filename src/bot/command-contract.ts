@@ -151,7 +151,7 @@ export const COMMAND_SPECS: Readonly<Record<CommandName, CommandSpec>> = {
       to: dateValidator,
       sort: sortValidator,
     },
-    implemented: false,
+    implemented: true,
   },
   progress_edit: {
     name: 'progress_edit',
