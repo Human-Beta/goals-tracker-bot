@@ -33,7 +33,10 @@ const GOAL_EDIT_IMMUTABLE_UNIT_MESSAGE =
 const GOAL_EDIT_CONFLICT_MESSAGE =
   'Could not apply this update because it conflicts with the goal state (for example, target below current progress). Please review the values and try again.';
 const PROGRESS_ADD_NOT_FOUND_MESSAGE = 'Goal not found. Run /goals to check available goal IDs and try again.';
+const PROGRESS_LIST_EMPTY_MESSAGE =
+  'No progress events found for this goal. Record progress with /progress_add goal=<uuid> delta=<number>.';
 const PROGRESS_EVENT_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+const PROGRESS_EVENT_ID_2 = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
 type GoalDetail = components['schemas']['GoalDetail'];
 type SendMessagePayload = {
@@ -1630,6 +1633,313 @@ describe('bot update handling', () => {
     expect(sendMessageCall?.payload).toMatchObject({
       chat_id: 12345,
       text: PROGRESS_ADD_NOT_FOUND_MESSAGE,
+    });
+  });
+
+  it('handles /progress_list by calling GET /goals/{goalId}/progress and rendering events', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsRequests: Request[] = [];
+
+    const goalsApiFetch: GoalsApiFetch = async (input, init) => {
+      const request = toRequest(input, init);
+      goalsRequests.push(request);
+      return jsonResponse({
+        items: [
+          {
+            id: PROGRESS_EVENT_ID,
+            goal_id: GOAL_DETAILS_ID,
+            date: '2026-04-15',
+            delta_value: 1.5,
+            note: 'morning run',
+            created_at: '2026-04-15T08:00:00.000Z',
+            updated_at: '2026-04-15T08:00:00.000Z',
+          },
+          {
+            id: PROGRESS_EVENT_ID_2,
+            goal_id: GOAL_DETAILS_ID,
+            date: '2026-04-20',
+            delta_value: 3,
+            note: null,
+            created_at: '2026-04-20T08:00:00.000Z',
+            updated_at: '2026-04-20T08:00:00.000Z',
+          },
+        ],
+      });
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 20,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(`/progress_list goal=${GOAL_DETAILS_ID}`);
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    expect(goalsRequests).toHaveLength(1);
+    const request = goalsRequests[0];
+    expect(request.method).toBe('GET');
+    const requestUrl = new URL(request.url);
+    expect(requestUrl.pathname).toBe(`/goals/${GOAL_DETAILS_ID}/progress`);
+    expect(requestUrl.searchParams.get('from')).toBeNull();
+    expect(requestUrl.searchParams.get('to')).toBeNull();
+    expect(requestUrl.searchParams.get('sort')).toBeNull();
+    expect(request.headers.get('Authorization')).toBe('Bearer service-token');
+    expect(request.headers.get('X-Telegram-User-Id')).toBe('12345');
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    expect(sendMessagePayload.chat_id).toBe(12345);
+    expect(sendMessagePayload.text).toContain('Progress history:');
+    expect(sendMessagePayload.text).toContain(`event_id: ${PROGRESS_EVENT_ID}`);
+    expect(sendMessagePayload.text).toContain(`event_id: ${PROGRESS_EVENT_ID_2}`);
+    expect(sendMessagePayload.text).toContain('delta_value: 1.5');
+    expect(sendMessagePayload.text).toContain('delta_value: 3');
+    expect(sendMessagePayload.text).toContain('note: morning run');
+    const eventTwoSection = sendMessagePayload.text.split(`event_id: ${PROGRESS_EVENT_ID_2}`)[1] ?? '';
+    expect(eventTwoSection).not.toContain('note:');
+  });
+
+  it('forwards from and to query params on /progress_list', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsRequests: Request[] = [];
+
+    const goalsApiFetch: GoalsApiFetch = async (input, init) => {
+      const request = toRequest(input, init);
+      goalsRequests.push(request);
+      return jsonResponse({
+        items: [
+          {
+            id: PROGRESS_EVENT_ID,
+            goal_id: GOAL_DETAILS_ID,
+            date: '2026-04-15',
+            delta_value: 1.5,
+            note: 'morning run',
+            created_at: '2026-04-15T08:00:00.000Z',
+            updated_at: '2026-04-15T08:00:00.000Z',
+          },
+        ],
+      });
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 21,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(`/progress_list goal=${GOAL_DETAILS_ID} from=2026-04-01 to=2026-05-01`);
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    expect(goalsRequests).toHaveLength(1);
+    const requestUrl = new URL(goalsRequests[0].url);
+    expect(requestUrl.pathname).toBe(`/goals/${GOAL_DETAILS_ID}/progress`);
+    expect(requestUrl.searchParams.get('from')).toBe('2026-04-01');
+    expect(requestUrl.searchParams.get('to')).toBe('2026-05-01');
+    expect(requestUrl.searchParams.get('sort')).toBeNull();
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    expect(sendMessagePayload.text).toContain(`event_id: ${PROGRESS_EVENT_ID}`);
+  });
+
+  it('forwards sort=desc on /progress_list', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsRequests: Request[] = [];
+
+    const goalsApiFetch: GoalsApiFetch = async (input, init) => {
+      const request = toRequest(input, init);
+      goalsRequests.push(request);
+      return jsonResponse({
+        items: [
+          {
+            id: PROGRESS_EVENT_ID_2,
+            goal_id: GOAL_DETAILS_ID,
+            date: '2026-04-20',
+            delta_value: 3,
+            note: null,
+            created_at: '2026-04-20T08:00:00.000Z',
+            updated_at: '2026-04-20T08:00:00.000Z',
+          },
+          {
+            id: PROGRESS_EVENT_ID,
+            goal_id: GOAL_DETAILS_ID,
+            date: '2026-04-15',
+            delta_value: 1.5,
+            note: 'morning run',
+            created_at: '2026-04-15T08:00:00.000Z',
+            updated_at: '2026-04-15T08:00:00.000Z',
+          },
+        ],
+      });
+    };
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 22,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(`/progress_list goal=${GOAL_DETAILS_ID} sort=desc`);
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    expect(goalsRequests).toHaveLength(1);
+    const requestUrl = new URL(goalsRequests[0].url);
+    expect(requestUrl.searchParams.get('sort')).toBe('desc');
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    const sendMessagePayload = sendMessageCall?.payload as { chat_id: number; text: string };
+    const firstEventIndex = sendMessagePayload.text.indexOf(`event_id: ${PROGRESS_EVENT_ID_2}`);
+    const secondEventIndex = sendMessagePayload.text.indexOf(`event_id: ${PROGRESS_EVENT_ID}`);
+    expect(firstEventIndex).toBeGreaterThan(-1);
+    expect(secondEventIndex).toBeGreaterThan(firstEventIndex);
+  });
+
+  it('returns empty-state message when /progress_list returns no events', async () => {
+    const apiCalls: ApiCall[] = [];
+    const goalsApiFetch: GoalsApiFetch = async () => jsonResponse({ items: [] });
+
+    const bot = createBot(TEST_CONFIG, { goalsApiFetch });
+    bot.api.config.use(async (_prev, method, payload) => {
+      apiCalls.push({ method, payload });
+      if (method === 'getMe') {
+        return {
+          ok: true,
+          result: {
+            id: 999,
+            is_bot: true,
+            first_name: 'Test Bot',
+            username: 'test_bot',
+            can_join_groups: true,
+            can_read_all_group_messages: false,
+            supports_inline_queries: false,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      if (method === 'sendMessage') {
+        const sendMessagePayload = payload as { chat_id: number; text: string };
+        return {
+          ok: true,
+          result: {
+            message_id: 23,
+            date: 1,
+            chat: {
+              id: sendMessagePayload.chat_id,
+              type: 'private',
+            },
+            text: sendMessagePayload.text,
+          },
+        } as Awaited<ReturnType<typeof _prev>>;
+      }
+
+      throw new Error(`Unexpected Telegram method: ${method}`);
+    });
+
+    const update = buildTextUpdate(`/progress_list goal=${GOAL_DETAILS_ID} from=2026-04-01 to=2026-04-02`);
+    await bot.init();
+    await bot.handleUpdate(update);
+
+    const sendMessageCall = apiCalls.find(call => call.method === 'sendMessage');
+    expect(sendMessageCall?.payload).toMatchObject({
+      chat_id: 12345,
+      text: PROGRESS_LIST_EMPTY_MESSAGE,
     });
   });
 });

@@ -41,3 +41,19 @@ export const PROGRESS_ADD_AUTH_ERROR_MESSAGE =
   'Temporary technical issue while recording your progress. Please try again later.';
 export const PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE =
   'Temporary issue while recording your progress. Please try again later.';
+
+export const PROGRESS_LIST_VALIDATION_HINT =
+  'Could not load progress events. Please check that from/to are in YYYY-MM-DD format and from is on or before to.';
+export const PROGRESS_LIST_EMPTY_MESSAGE =
+  'No progress events found for this goal. Record progress with /progress_add goal=<uuid> delta=<number>.';
+export const PROGRESS_LIST_NOT_FOUND_MESSAGE = 'Goal not found. Run /goals to check available goal IDs and try again.';
+export const PROGRESS_LIST_AUTH_ERROR_MESSAGE =
+  'Temporary technical issue while loading progress history. Please try again later.';
+export const PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE =
+  'Temporary issue while loading progress history. Please try again later.';
+
+export const PROGRESS_LIST_DISPLAY_LIMIT = 20;
+
+export function formatProgressListTruncatedNotice(shown: number, total: number): string {
+  return `Showing first ${shown} of ${total} events. Use from=YYYY-MM-DD and to=YYYY-MM-DD to narrow the date range.`;
+}

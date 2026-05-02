@@ -1,5 +1,9 @@
 import type { components } from '../api/generated/schema';
-import { GOAL_DETAILS_ETA_NULL_EXPLANATION } from './messages';
+import {
+  formatProgressListTruncatedNotice,
+  GOAL_DETAILS_ETA_NULL_EXPLANATION,
+  PROGRESS_LIST_DISPLAY_LIMIT,
+} from './messages';
 
 type GoalBase = components['schemas']['GoalBase'];
 type GoalListItem = components['schemas']['GoalListItem'];
@@ -81,6 +85,31 @@ export function formatProgressAddSuccessResponse(event: ProgressEvent): string {
       ['delta_value', event.delta_value],
     ]),
   ].join('\n');
+}
+
+export function formatProgressListResponse(items: ProgressEvent[]): string {
+  const visibleItems = items.slice(0, PROGRESS_LIST_DISPLAY_LIMIT);
+  const formattedItems = visibleItems.map(item => {
+    const rows: Array<readonly [label: string, value: string | number]> = [
+      ['event_id', item.id],
+      ['date', item.date],
+      ['delta_value', item.delta_value],
+    ];
+
+    if (typeof item.note === 'string' && item.note.length > 0) {
+      rows.push(['note', item.note]);
+    }
+
+    return formatLabelValueLines(rows);
+  });
+
+  const sections: string[] = ['Progress history:', formattedItems.join('\n\n')];
+
+  if (items.length > PROGRESS_LIST_DISPLAY_LIMIT) {
+    sections.push(formatProgressListTruncatedNotice(visibleItems.length, items.length));
+  }
+
+  return sections.join('\n\n');
 }
 
 export function formatGoalDetailsResponse(goal: GoalDetail): string {

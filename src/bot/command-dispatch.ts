@@ -9,6 +9,7 @@ import {
   handleGoalEditCommand,
   handleGoalsListCommand,
   handleProgressAddCommand,
+  handleProgressListCommand,
   handleStartCommand,
 } from './command-handlers';
 import { parseGoalDetailsCallbackData } from './goal-callback-data';
@@ -35,6 +36,7 @@ export async function resolveCommandResponse(
         case 'goal':
         case 'goal_edit':
         case 'progress_add':
+        case 'progress_list':
           response = toCommandResponse(formatInvalidCommandMessage(parsedCommand.reason, parsedCommand.usage));
           break;
         default:
@@ -69,6 +71,11 @@ export async function resolveCommandResponse(
         case 'progress_add':
           response = toCommandResponse(
             await handleProgressAddCommand(ctx, config, dependencies, parsedCommand.command.args)
+          );
+          break;
+        case 'progress_list':
+          response = toCommandResponse(
+            await handleProgressListCommand(ctx, config, dependencies, parsedCommand.command.args)
           );
           break;
         default:
