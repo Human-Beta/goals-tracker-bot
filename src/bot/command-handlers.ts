@@ -27,6 +27,16 @@ import {
   PROGRESS_ADD_NOT_FOUND_MESSAGE,
   PROGRESS_ADD_UPSTREAM_FALLBACK_MESSAGE,
   PROGRESS_ADD_VALIDATION_HINT,
+  PROGRESS_DELETE_AUTH_ERROR_MESSAGE,
+  PROGRESS_DELETE_NOT_FOUND_MESSAGE,
+  PROGRESS_DELETE_SUCCESS_MESSAGE,
+  PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE,
+  PROGRESS_EDIT_AUTH_ERROR_MESSAGE,
+  PROGRESS_EDIT_CONFLICT_MESSAGE,
+  PROGRESS_EDIT_NOT_FOUND_MESSAGE,
+  PROGRESS_EDIT_NOTHING_TO_UPDATE_MESSAGE,
+  PROGRESS_EDIT_UPSTREAM_FALLBACK_MESSAGE,
+  PROGRESS_EDIT_VALIDATION_HINT,
   PROGRESS_LIST_AUTH_ERROR_MESSAGE,
   PROGRESS_LIST_EMPTY_MESSAGE,
   PROGRESS_LIST_NOT_FOUND_MESSAGE,
@@ -43,6 +53,7 @@ import {
   formatGoalsListResponse,
   formatGoalTitleCommandLabel,
   formatProgressAddSuccessResponse,
+  formatProgressEditSuccessResponse,
   formatProgressListResponse,
 } from './response-formatters';
 
@@ -392,5 +403,111 @@ export async function handleProgressListCommand(
 
     console.warn('[bot] failed to list progress on /progress_list', error);
     return PROGRESS_LIST_UPSTREAM_FALLBACK_MESSAGE;
+  }
+}
+
+export async function handleProgressEditCommand(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  { goal: goalId, event: eventId, delta, date, note }: Readonly<Record<string, string>>
+): Promise<string> {
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  if (scopedClient === null) {
+    return PROGRESS_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  if (goalId === undefined || eventId === undefined) {
+    return PROGRESS_EDIT_VALIDATION_HINT;
+  }
+
+  if (delta === undefined && date === undefined && note === undefined) {
+    return PROGRESS_EDIT_NOTHING_TO_UPDATE_MESSAGE;
+  }
+
+  let deltaValue: number | undefined;
+  if (delta !== undefined) {
+    const parsedDelta = Number(delta);
+    if (!Number.isFinite(parsedDelta)) {
+      return PROGRESS_EDIT_VALIDATION_HINT;
+    }
+    deltaValue = parsedDelta;
+  }
+
+  try {
+    const updatedEvent = await scopedClient.client.PATCH('/goals/{goalId}/progress/{eventId}', {
+      params: {
+        path: {
+          goalId,
+          eventId,
+        },
+      },
+      body: {
+        ...(deltaValue === undefined ? {} : { delta_value: deltaValue }),
+        ...(date === undefined ? {} : { date }),
+        ...(note === undefined ? {} : { note }),
+      },
+    });
+
+    return formatProgressEditSuccessResponse(updatedEvent);
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      return PROGRESS_EDIT_VALIDATION_HINT;
+    }
+
+    if (error instanceof ConflictError) {
+      return PROGRESS_EDIT_CONFLICT_MESSAGE;
+    }
+
+    if (error instanceof NotFoundError) {
+      return PROGRESS_EDIT_NOT_FOUND_MESSAGE;
+    }
+
+    if (error instanceof AuthError) {
+      return PROGRESS_EDIT_AUTH_ERROR_MESSAGE;
+    }
+
+    console.warn('[bot] failed to edit progress on /progress_edit', error);
+    return PROGRESS_EDIT_UPSTREAM_FALLBACK_MESSAGE;
+  }
+}
+
+export async function handleProgressDeleteCommand(
+  ctx: Context,
+  config: AppConfig,
+  dependencies: CreateBotDependencies,
+  { goal: goalId, event: eventId, confirm }: Readonly<Record<string, string>>
+): Promise<string> {
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  if (scopedClient === null) {
+    return PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  if (goalId === undefined || eventId === undefined || confirm !== 'yes') {
+    return PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE;
+  }
+
+  try {
+    await scopedClient.client.DELETE('/goals/{goalId}/progress/{eventId}', {
+      params: {
+        path: {
+          goalId,
+          eventId,
+        },
+      },
+    });
+
+    return PROGRESS_DELETE_SUCCESS_MESSAGE;
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      return PROGRESS_DELETE_NOT_FOUND_MESSAGE;
+    }
+
+    if (error instanceof AuthError) {
+      return PROGRESS_DELETE_AUTH_ERROR_MESSAGE;
+    }
+
+    console.warn('[bot] failed to delete progress on /progress_delete', error);
+    return PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE;
   }
 }

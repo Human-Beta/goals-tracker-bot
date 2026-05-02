@@ -57,3 +57,23 @@ export const PROGRESS_LIST_DISPLAY_LIMIT = 20;
 export function formatProgressListTruncatedNotice(shown: number, total: number): string {
   return `Showing first ${shown} of ${total} events. Use from=YYYY-MM-DD and to=YYYY-MM-DD to narrow the date range.`;
 }
+
+export const PROGRESS_EDIT_VALIDATION_HINT =
+  'Could not update the progress event. Please check that delta is a number, date is in YYYY-MM-DD format, and note is non-empty, then try again.';
+export const PROGRESS_EDIT_NOTHING_TO_UPDATE_MESSAGE = 'Nothing to update. Provide at least one of: delta, date, note.';
+export const PROGRESS_EDIT_NOT_FOUND_MESSAGE =
+  'Progress event not found. Run /progress_list goal=<uuid> to check available event IDs and try again.';
+export const PROGRESS_EDIT_CONFLICT_MESSAGE =
+  'Could not apply this update because it conflicts with the goal state. Please review the values and try again.';
+export const PROGRESS_EDIT_AUTH_ERROR_MESSAGE =
+  'Temporary technical issue while updating your progress event. Please try again later.';
+export const PROGRESS_EDIT_UPSTREAM_FALLBACK_MESSAGE =
+  'Temporary issue while updating your progress event. Please try again later.';
+
+export const PROGRESS_DELETE_SUCCESS_MESSAGE = 'Progress event deleted.';
+export const PROGRESS_DELETE_NOT_FOUND_MESSAGE =
+  'Progress event not found. Run /progress_list goal=<uuid> to check available event IDs and try again.';
+export const PROGRESS_DELETE_AUTH_ERROR_MESSAGE =
+  'Temporary technical issue while deleting your progress event. Please try again later.';
+export const PROGRESS_DELETE_UPSTREAM_FALLBACK_MESSAGE =
+  'Temporary issue while deleting your progress event. Please try again later.';
