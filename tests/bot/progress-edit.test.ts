@@ -6,6 +6,7 @@ import {
   expectAuthHeaders,
   GOAL_DETAILS_ID,
   jsonResponse,
+  PROGRESS_EDIT_CONFLICT_MESSAGE,
   PROGRESS_EDIT_NOT_FOUND_MESSAGE,
   PROGRESS_EDIT_NOTHING_TO_UPDATE_MESSAGE,
   PROGRESS_EVENT_ID,
@@ -81,6 +82,33 @@ describe('/progress_edit', () => {
     expect(sendMessagePayload).toMatchObject({
       chat_id: TEST_CHAT_ID,
       text: PROGRESS_EDIT_NOT_FOUND_MESSAGE,
+    });
+  });
+
+  it('returns conflict message when API fails with 409', async () => {
+    const goalsApiFetch: GoalsApiFetch = async () =>
+      jsonResponse(
+        {
+          code: 'progress_event_conflict',
+          message: 'event conflicts with goal state',
+        },
+        409
+      );
+
+    const { goalsRequests, sendMessagePayload } = await runBotScenario({
+      goalsApiFetch,
+      update: buildTextUpdate(`/progress_edit goal=${GOAL_DETAILS_ID} event=${PROGRESS_EVENT_ID} delta=999`),
+    });
+
+    expect(goalsRequests).toHaveLength(1);
+    const request = goalsRequests[0];
+    expect(request.method).toBe('PATCH');
+    expect(new URL(request.url).pathname).toBe(`/goals/${GOAL_DETAILS_ID}/progress/${PROGRESS_EVENT_ID}`);
+    expectAuthHeaders(request);
+
+    expect(sendMessagePayload).toMatchObject({
+      chat_id: TEST_CHAT_ID,
+      text: PROGRESS_EDIT_CONFLICT_MESSAGE,
     });
   });
 });

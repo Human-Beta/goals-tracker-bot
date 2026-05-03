@@ -7,6 +7,7 @@ import {
   GOAL_DETAILS_ID,
   jsonResponse,
   PROGRESS_ADD_NOT_FOUND_MESSAGE,
+  PROGRESS_ADD_VALIDATION_MESSAGE,
   PROGRESS_EVENT_ID,
   runBotScenario,
   TEST_CHAT_ID,
@@ -80,6 +81,33 @@ describe('/progress_add', () => {
     expect(sendMessagePayload).toMatchObject({
       chat_id: TEST_CHAT_ID,
       text: PROGRESS_ADD_NOT_FOUND_MESSAGE,
+    });
+  });
+
+  it('returns validation message when API rejects date with 400', async () => {
+    const goalsApiFetch: GoalsApiFetch = async () =>
+      jsonResponse(
+        {
+          code: 'validation_error',
+          message: 'date out of range',
+        },
+        400
+      );
+
+    const { goalsRequests, sendMessagePayload } = await runBotScenario({
+      goalsApiFetch,
+      update: buildTextUpdate(`/progress_add goal=${GOAL_DETAILS_ID} delta=5 date=2099-01-01`),
+    });
+
+    expect(goalsRequests).toHaveLength(1);
+    const request = goalsRequests[0];
+    expect(request.method).toBe('POST');
+    expect(new URL(request.url).pathname).toBe(`/goals/${GOAL_DETAILS_ID}/progress`);
+    expectAuthHeaders(request);
+
+    expect(sendMessagePayload).toMatchObject({
+      chat_id: TEST_CHAT_ID,
+      text: PROGRESS_ADD_VALIDATION_MESSAGE,
     });
   });
 });
