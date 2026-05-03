@@ -2,7 +2,8 @@ import * as crypto from 'node:crypto';
 
 import createClient, { type ClientOptions, type Middleware } from 'openapi-fetch';
 
-import { normalizeApiError, TransientUpstreamError } from './errors';
+import { log } from '../shared/logger';
+import { isNormalizedApiError, normalizeApiError, TransientUpstreamError } from './errors';
 import type { paths } from './generated/schema';
 
 export const CORRELATION_ID_HEADER = 'X-Correlation-Id';
@@ -259,45 +260,56 @@ type RetryContext = {
   method: string;
   path: string;
   signal?: AbortSignal | null;
+  correlationId: string;
 };
 
+type RetryResult<T> =
+  | { outcome: 'success'; value: T; attempts: number; status: number | undefined }
+  | { outcome: 'error'; error: unknown; attempts: number; status: number | undefined };
+
 async function executeWithRetry<T>(
-  invocation: (attempt: number) => Promise<T>,
+  invocation: (attempt: number) => Promise<{ value: T; status: number | undefined }>,
   context: RetryContext,
   retry: ResolvedRetryOptions
-): Promise<T> {
+): Promise<RetryResult<T>> {
   let attempt = 1;
 
   while (true) {
     try {
-      return await invocation(attempt);
+      const { value, status } = await invocation(attempt);
+      return { outcome: 'success', value, attempts: attempt, status };
     } catch (error) {
       if (!(error instanceof TransientUpstreamError)) {
-        throw error;
+        return { outcome: 'error', error, attempts: attempt, status: getErrorStatus(error) };
       }
 
       if (attempt >= retry.maxAttempts) {
-        throw error;
+        return { outcome: 'error', error, attempts: attempt, status: error.status };
       }
 
       if (context.signal?.aborted) {
-        throw error;
+        return { outcome: 'error', error, attempts: attempt, status: error.status };
       }
 
       const nextDelayMs = retry.baseDelayMs * 2 ** (attempt - 1);
-      console.warn('[api] retrying transient failure', {
+      log('warn', 'api_request_retry', {
+        correlation_id: context.correlationId,
         method: context.method,
         path: context.path,
         attempt,
-        nextDelayMs,
-        errorName: error.name,
+        next_delay_ms: nextDelayMs,
         status: error.status,
+        error_name: error.name,
       });
 
       await delay(nextDelayMs);
       attempt += 1;
     }
   }
+}
+
+function getErrorStatus(error: unknown): number | undefined {
+  return isNormalizedApiError(error) ? error.status : undefined;
 }
 
 export function createGoalsApiClient(options: CreateGoalsApiClientOptions): GoalsApiClient {
@@ -341,8 +353,9 @@ export function createGoalsApiClient(options: CreateGoalsApiClientOptions): Goal
     const normalizedMethod = normalizeMethod(method);
     const pathString = String(path);
     const callerSignal = init?.signal ?? null;
+    const startedAt = Date.now();
 
-    return executeWithRetry(
+    const outcome = await executeWithRetry<OperationData<OperationFor<Path, Method>>>(
       async () => {
         const result = await invokeRequest(method, pathString, init).catch(error => {
           throw normalizeApiError({
@@ -361,11 +374,41 @@ export function createGoalsApiClient(options: CreateGoalsApiClientOptions): Goal
           });
         }
 
-        return result.data as OperationData<OperationFor<Path, Method>>;
+        return {
+          value: result.data as OperationData<OperationFor<Path, Method>>,
+          status: result.response.status,
+        };
       },
-      { method: normalizedMethod, path: pathString, signal: callerSignal },
+      { method: normalizedMethod, path: pathString, signal: callerSignal, correlationId },
       retry
     );
+
+    const durationMs = Date.now() - startedAt;
+
+    if (outcome.outcome === 'success') {
+      log('info', 'api_request_completed', {
+        correlation_id: correlationId,
+        method: normalizedMethod,
+        path: pathString,
+        status: outcome.status,
+        duration_ms: durationMs,
+        attempts: outcome.attempts,
+        outcome: 'success',
+      });
+      return outcome.value;
+    }
+
+    log('warn', 'api_request_completed', {
+      correlation_id: correlationId,
+      method: normalizedMethod,
+      path: pathString,
+      status: outcome.status,
+      duration_ms: durationMs,
+      attempts: outcome.attempts,
+      outcome: 'error',
+      error_name: outcome.error instanceof Error ? outcome.error.name : 'UnknownError',
+    });
+    throw outcome.error;
   }
 
   return {

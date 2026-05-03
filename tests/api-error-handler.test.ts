@@ -16,8 +16,10 @@ const fullMessages = defineApiErrorMessages({
 });
 
 describe('mapApiError', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -51,6 +53,8 @@ describe('mapApiError', () => {
 
     expect(result).toBe('F');
     expect(result).not.toContain('SECRET');
+    const logged = warnSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+    expect(logged).not.toContain('SECRET');
   });
 
   it('falls back for unknown errors and does not leak error text', () => {
@@ -59,6 +63,9 @@ describe('mapApiError', () => {
     expect(result).toBe('F');
     expect(result).not.toContain('boom');
     expect(result).not.toContain('stack');
+    const logged = warnSpy.mock.calls.map((call: unknown[]) => String(call[0])).join('\n');
+    expect(logged).not.toContain('boom');
+    expect(logged).not.toContain('stack');
   });
 
   it('integrates with goalEditMessages dictionary for ConflictError', () => {
@@ -66,5 +73,24 @@ describe('mapApiError', () => {
 
     expect(result).toBe(goalEditMessages.conflict);
     expect(result).toContain('conflicts with the goal state');
+  });
+
+  it('emits structured api_error_unmapped log with correlation id and error metadata for fallback path', () => {
+    const fallbackOnly = defineApiErrorMessages({
+      fallback: 'F',
+      logContext: 'ctx-label',
+    });
+
+    mapApiError(new ValidationError(SECRET), fallbackOnly, 'corr-xyz');
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(warnSpy.mock.calls[0][0] as string) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      event: 'api_error_unmapped',
+      context: 'ctx-label',
+      error_name: 'ValidationError',
+      error_code: 'VALIDATION_ERROR',
+      correlation_id: 'corr-xyz',
+    });
   });
 });

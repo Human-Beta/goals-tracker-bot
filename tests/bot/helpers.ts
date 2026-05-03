@@ -1,4 +1,4 @@
-import { expect } from 'vitest';
+import { expect, vi, type MockInstance } from 'vitest';
 
 import type { GoalsApiFetch } from '../../src/api/client';
 import type { components } from '../../src/api/generated/schema';
@@ -257,4 +257,70 @@ export async function runBotScenario(options: RunBotScenarioOptions): Promise<Ru
 export function expectAuthHeaders(request: Request): void {
   expect(request.headers.get('Authorization')).toBe('Bearer service-token');
   expect(request.headers.get('X-Telegram-User-Id')).toBe('12345');
+}
+
+const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+type CapturedLog = { level: (typeof LOG_LEVELS)[number]; args: unknown[] };
+
+export type LogCapture = {
+  entries: CapturedLog[];
+  restore: () => void;
+  joined: () => string;
+};
+
+export function captureLogs(): LogCapture {
+  const entries: CapturedLog[] = [];
+  const spies: MockInstance[] = LOG_LEVELS.map(level =>
+    vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+      entries.push({ level, args });
+    })
+  );
+
+  return {
+    entries,
+    restore: () => {
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
+    },
+    joined: () =>
+      entries
+        .map(entry => entry.args.map(arg => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '))
+        .join('\n'),
+  };
+}
+
+export type ParsedLogEntry = {
+  level: CapturedLog['level'];
+  event: string;
+  fields: Record<string, unknown>;
+};
+
+export function parseStructuredLogs(capture: LogCapture): ParsedLogEntry[] {
+  const parsed: ParsedLogEntry[] = [];
+  for (const entry of capture.entries) {
+    const [first] = entry.args;
+    if (typeof first !== 'string') {
+      continue;
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(first);
+    } catch {
+      continue;
+    }
+    if (typeof payload !== 'object' || payload === null) {
+      continue;
+    }
+    const record = payload as Record<string, unknown>;
+    if (typeof record.event !== 'string') {
+      continue;
+    }
+    parsed.push({
+      level: entry.level,
+      event: record.event,
+      fields: record,
+    });
+  }
+  return parsed;
 }
