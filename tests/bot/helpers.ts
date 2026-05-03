@@ -29,17 +29,22 @@ export const GOALS_LIST_AUTH_ERROR_MESSAGE =
   'Temporary technical issue while loading your goals. Please try again later.';
 export const GOALS_LIST_NOT_FOUND_MESSAGE =
   'Could not find your profile context. Run /start timezone=<IANA> and then try /goals again.';
+export const GOALS_LIST_FALLBACK_MESSAGE = 'Temporary issue while loading your goals. Please try again later.';
 export const GOAL_DETAILS_ETA_NULL_EXPLANATION = 'ETA cannot be estimated at the current pace.';
 export const GOAL_EDIT_IMMUTABLE_UNIT_MESSAGE =
   'Goal unit cannot be changed after the goal is created. Create a new goal with /goal_create to use a different unit.';
 export const GOAL_EDIT_CONFLICT_MESSAGE =
   'Could not apply this update because it conflicts with the goal state (for example, target below current progress). Please review the values and try again.';
 export const PROGRESS_ADD_NOT_FOUND_MESSAGE = 'Goal not found. Run /goals to check available goal IDs and try again.';
+export const PROGRESS_ADD_VALIDATION_MESSAGE =
+  'Could not record progress. Please check that delta is a positive number and date is in YYYY-MM-DD format, then try again.';
 export const PROGRESS_LIST_EMPTY_MESSAGE =
   'No progress events found for this goal. Record progress with /progress_add goal=<uuid> delta=<number>.';
 export const PROGRESS_EDIT_NOTHING_TO_UPDATE_MESSAGE = 'Nothing to update. Provide at least one of: delta, date, note.';
 export const PROGRESS_EDIT_NOT_FOUND_MESSAGE =
   'Progress event not found. Run /progress_list goal=<uuid> to check available event IDs and try again.';
+export const PROGRESS_EDIT_CONFLICT_MESSAGE =
+  'Could not apply this update because it conflicts with the goal state. Please review the values and try again.';
 export const PROGRESS_DELETE_SUCCESS_MESSAGE = 'Progress event deleted.';
 export const PROGRESS_DELETE_NOT_FOUND_MESSAGE =
   'Progress event not found. Run /progress_list goal=<uuid> to check available event IDs and try again.';
