@@ -3,6 +3,7 @@ import { defineApiErrorMessages } from './api-error-handler';
 export const startMessages = defineApiErrorMessages({
   success: 'You are all set. Timezone saved:',
   validation: 'Please provide a valid IANA timezone. Example: /start timezone=Europe/Kyiv',
+  auth: 'Temporary technical issue while saving your profile. Please try again later.',
   fallback: 'Temporary issue while saving your profile. Please try again later.',
   logContext: 'failed to upsert user on /start',
 });
@@ -10,6 +11,7 @@ export const startMessages = defineApiErrorMessages({
 export const goalCreateMessages = defineApiErrorMessages({
   validation:
     'Could not create the goal. Please check title, unit, target, and date format (YYYY-MM-DD), then try again.',
+  auth: 'Temporary technical issue while creating your goal. Please try again later.',
   fallback: 'Temporary issue while creating your goal. Please try again later.',
   logContext: 'failed to create goal on /goal_create',
 });
