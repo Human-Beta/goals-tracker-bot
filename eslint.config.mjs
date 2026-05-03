@@ -17,5 +17,14 @@ export default tseslint.config(
     rules: {
       curly: ['error', 'all'],
     },
+  },
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+      },
+    },
   }
 );

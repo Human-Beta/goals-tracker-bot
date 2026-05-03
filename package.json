@@ -11,8 +11,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "format": "prettier -w .",
-    "test": "vitest run",
+    "test": "npm run check:api-types && vitest run",
     "generate:api-types": "openapi-typescript ../goals-tracker-api/swagger.yaml -o src/api/generated/schema.d.ts",
+    "check:api-types": "node scripts/check-api-types.mjs",
     "prepare": "husky"
   },
   "devDependencies": {
