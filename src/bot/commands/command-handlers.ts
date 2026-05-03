@@ -54,13 +54,14 @@ export async function handleStartCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  timezone: string | undefined
+  timezone: string | undefined,
+  correlationId: string
 ): Promise<string> {
   if (timezone === undefined) {
     return startMessages.validation;
   }
 
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return startMessages.fallback;
   }
@@ -75,7 +76,7 @@ export async function handleStartCommand(
 
     return `${startMessages.success} ${timezone}.`;
   } catch (error) {
-    return mapApiError(error, startMessages);
+    return mapApiError(error, startMessages, correlationId);
   }
 }
 
@@ -83,9 +84,10 @@ export async function handleGoalCreateCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  { title, unit, target, end, start }: Readonly<Record<string, string>>
+  { title, unit, target, end, start }: Readonly<Record<string, string>>,
+  correlationId: string
 ): Promise<string> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return goalCreateMessages.fallback;
   }
@@ -116,16 +118,17 @@ export async function handleGoalCreateCommand(
 
     return formatGoalCreateSuccessResponse(createdGoal);
   } catch (error) {
-    return mapApiError(error, goalCreateMessages);
+    return mapApiError(error, goalCreateMessages, correlationId);
   }
 }
 
 export async function handleGoalsListCommand(
   ctx: Context,
   config: AppConfig,
-  dependencies: CreateBotDependencies
+  dependencies: CreateBotDependencies,
+  correlationId: string
 ): Promise<CommandResponse> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return toCommandResponse(goalsListMessages.fallback);
   }
@@ -140,7 +143,7 @@ export async function handleGoalsListCommand(
       reply_markup: buildGoalsListKeyboard(response.items),
     });
   } catch (error) {
-    return toCommandResponse(mapApiError(error, goalsListMessages));
+    return toCommandResponse(mapApiError(error, goalsListMessages, correlationId));
   }
 }
 
@@ -148,9 +151,10 @@ export async function handleGoalDetailsCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  args: Readonly<Record<string, string>>
+  args: Readonly<Record<string, string>>,
+  correlationId: string
 ): Promise<string> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return goalDetailsMessages.fallback;
   }
@@ -171,7 +175,7 @@ export async function handleGoalDetailsCommand(
 
     return formatGoalDetailsResponse(response);
   } catch (error) {
-    return mapApiError(error, goalDetailsMessages);
+    return mapApiError(error, goalDetailsMessages, correlationId);
   }
 }
 
@@ -179,9 +183,10 @@ export async function handleGoalEditCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  { id: goalId, title, target, start, end, unit }: Readonly<Record<string, string>>
+  { id: goalId, title, target, start, end, unit }: Readonly<Record<string, string>>,
+  correlationId: string
 ): Promise<string> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return goalEditMessages.fallback;
   }
@@ -224,7 +229,7 @@ export async function handleGoalEditCommand(
 
     return formatGoalEditSuccessResponse(updatedGoal);
   } catch (error) {
-    return mapApiError(error, goalEditMessages);
+    return mapApiError(error, goalEditMessages, correlationId);
   }
 }
 
@@ -232,9 +237,10 @@ export async function handleProgressAddCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  { goal: goalId, delta, date, note }: Readonly<Record<string, string>>
+  { goal: goalId, delta, date, note }: Readonly<Record<string, string>>,
+  correlationId: string
 ): Promise<string> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return progressAddMessages.fallback;
   }
@@ -259,7 +265,7 @@ export async function handleProgressAddCommand(
 
     return formatProgressAddSuccessResponse(event);
   } catch (error) {
-    return mapApiError(error, progressAddMessages);
+    return mapApiError(error, progressAddMessages, correlationId);
   }
 }
 
@@ -267,9 +273,10 @@ export async function handleProgressListCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  { goal: goalId, from, to, sort }: Readonly<Record<string, string>>
+  { goal: goalId, from, to, sort }: Readonly<Record<string, string>>,
+  correlationId: string
 ): Promise<string> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return progressListMessages.fallback;
   }
@@ -302,7 +309,7 @@ export async function handleProgressListCommand(
 
     return formatProgressListResponse(result.items);
   } catch (error) {
-    return mapApiError(error, progressListMessages);
+    return mapApiError(error, progressListMessages, correlationId);
   }
 }
 
@@ -310,9 +317,10 @@ export async function handleProgressEditCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  { goal: goalId, event: eventId, delta, date, note }: Readonly<Record<string, string>>
+  { goal: goalId, event: eventId, delta, date, note }: Readonly<Record<string, string>>,
+  correlationId: string
 ): Promise<string> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return progressEditMessages.fallback;
   }
@@ -351,7 +359,7 @@ export async function handleProgressEditCommand(
 
     return formatProgressEditSuccessResponse(updatedEvent);
   } catch (error) {
-    return mapApiError(error, progressEditMessages);
+    return mapApiError(error, progressEditMessages, correlationId);
   }
 }
 
@@ -359,9 +367,10 @@ export async function handleProgressDeleteCommand(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  { goal: goalId, event: eventId, confirm }: Readonly<Record<string, string>>
+  { goal: goalId, event: eventId, confirm }: Readonly<Record<string, string>>,
+  correlationId: string
 ): Promise<string> {
-  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies);
+  const scopedClient = createUserScopedGoalsClient(ctx, config, dependencies, correlationId);
   if (scopedClient === null) {
     return progressDeleteMessages.fallback;
   }
@@ -382,6 +391,6 @@ export async function handleProgressDeleteCommand(
 
     return progressDeleteMessages.success;
   } catch (error) {
-    return mapApiError(error, progressDeleteMessages);
+    return mapApiError(error, progressDeleteMessages, correlationId);
   }
 }

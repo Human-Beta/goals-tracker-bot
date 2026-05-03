@@ -102,13 +102,16 @@ function buildRetryClient(fetchMock: GoalsApiFetch, overrides: { maxAttempts?: n
 
 describe('createGoalsApiClient retry', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
 
   afterEach(() => {
     warnSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 
   it('retries on consecutive 5xx then succeeds', async () => {
@@ -185,7 +188,7 @@ describe('createGoalsApiClient retry', () => {
     expect(requests).toHaveLength(1);
   });
 
-  it('logs retry attempts via console.warn', async () => {
+  it('logs retry attempts and request completion as structured JSON', async () => {
     const { fetchMock } = makeQueuedFetch([
       jsonResponse({ code: 'internal_error' }, 500),
       jsonResponse({ items: [] }, 200),
@@ -194,15 +197,29 @@ describe('createGoalsApiClient retry', () => {
     await buildRetryClient(fetchMock).GET('/goals');
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
-      '[api] retrying transient failure',
-      expect.objectContaining({
-        method: 'GET',
-        path: '/goals',
-        attempt: 1,
-        nextDelayMs: 0,
-      })
-    );
+    const retryPayload = JSON.parse(warnSpy.mock.calls[0][0] as string) as Record<string, unknown>;
+    expect(retryPayload).toMatchObject({
+      event: 'api_request_retry',
+      method: 'GET',
+      path: '/goals',
+      attempt: 1,
+      next_delay_ms: 0,
+      status: 500,
+      correlation_id: 'retry-test',
+    });
+
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    const completedPayload = JSON.parse(infoSpy.mock.calls[0][0] as string) as Record<string, unknown>;
+    expect(completedPayload).toMatchObject({
+      event: 'api_request_completed',
+      method: 'GET',
+      path: '/goals',
+      status: 200,
+      attempts: 2,
+      outcome: 'success',
+      correlation_id: 'retry-test',
+    });
+    expect(typeof completedPayload.duration_ms).toBe('number');
   });
 
   it('respects custom maxAttempts override', async () => {

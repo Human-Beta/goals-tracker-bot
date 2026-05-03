@@ -15,7 +15,8 @@ type UserScopedGoalsClient = {
 export function createUserScopedGoalsClient(
   ctx: Context,
   config: AppConfig,
-  dependencies: CreateBotDependencies
+  dependencies: CreateBotDependencies,
+  correlationId: string
 ): UserScopedGoalsClient | null {
   if (ctx.from === undefined) {
     return null;
@@ -30,6 +31,7 @@ export function createUserScopedGoalsClient(
       telegramUserId,
       fetch: dependencies.goalsApiFetch,
       timeoutMs: config.HTTP_TIMEOUT_MS,
+      correlationId,
     }),
   };
 }

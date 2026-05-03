@@ -24,7 +24,8 @@ export async function resolveCommandResponse(
   config: AppConfig,
   dependencies: CreateBotDependencies,
   rawText: string,
-  parsedCommand: CommandParseResult
+  parsedCommand: CommandParseResult,
+  correlationId: string
 ): Promise<CommandResponse> {
   let response = toCommandResponse(routeTextMessage(rawText));
 
@@ -51,45 +52,45 @@ export async function resolveCommandResponse(
       switch (parsedCommand.command.name) {
         case 'start':
           response = toCommandResponse(
-            await handleStartCommand(ctx, config, dependencies, parsedCommand.command.args.timezone)
+            await handleStartCommand(ctx, config, dependencies, parsedCommand.command.args.timezone, correlationId)
           );
           break;
         case 'goal_create':
           response = toCommandResponse(
-            await handleGoalCreateCommand(ctx, config, dependencies, parsedCommand.command.args)
+            await handleGoalCreateCommand(ctx, config, dependencies, parsedCommand.command.args, correlationId)
           );
           break;
         case 'goals':
-          response = await handleGoalsListCommand(ctx, config, dependencies);
+          response = await handleGoalsListCommand(ctx, config, dependencies, correlationId);
           break;
         case 'goal':
           response = toCommandResponse(
-            await handleGoalDetailsCommand(ctx, config, dependencies, parsedCommand.command.args)
+            await handleGoalDetailsCommand(ctx, config, dependencies, parsedCommand.command.args, correlationId)
           );
           break;
         case 'goal_edit':
           response = toCommandResponse(
-            await handleGoalEditCommand(ctx, config, dependencies, parsedCommand.command.args)
+            await handleGoalEditCommand(ctx, config, dependencies, parsedCommand.command.args, correlationId)
           );
           break;
         case 'progress_add':
           response = toCommandResponse(
-            await handleProgressAddCommand(ctx, config, dependencies, parsedCommand.command.args)
+            await handleProgressAddCommand(ctx, config, dependencies, parsedCommand.command.args, correlationId)
           );
           break;
         case 'progress_list':
           response = toCommandResponse(
-            await handleProgressListCommand(ctx, config, dependencies, parsedCommand.command.args)
+            await handleProgressListCommand(ctx, config, dependencies, parsedCommand.command.args, correlationId)
           );
           break;
         case 'progress_edit':
           response = toCommandResponse(
-            await handleProgressEditCommand(ctx, config, dependencies, parsedCommand.command.args)
+            await handleProgressEditCommand(ctx, config, dependencies, parsedCommand.command.args, correlationId)
           );
           break;
         case 'progress_delete':
           response = toCommandResponse(
-            await handleProgressDeleteCommand(ctx, config, dependencies, parsedCommand.command.args)
+            await handleProgressDeleteCommand(ctx, config, dependencies, parsedCommand.command.args, correlationId)
           );
           break;
         default:
@@ -108,13 +109,14 @@ export async function resolveCallbackQueryResponse(
   ctx: Context,
   config: AppConfig,
   dependencies: CreateBotDependencies,
-  callbackData: string
+  callbackData: string,
+  correlationId: string
 ): Promise<CommandResponse | null> {
   const goalId = parseGoalDetailsCallbackData(callbackData);
   if (goalId === null) {
     return null;
   }
 
-  const responseText = await handleGoalDetailsCommand(ctx, config, dependencies, { id: goalId });
+  const responseText = await handleGoalDetailsCommand(ctx, config, dependencies, { id: goalId }, correlationId);
   return toCommandResponse(responseText);
 }

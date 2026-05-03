@@ -1,4 +1,5 @@
-import { AuthError, ConflictError, NotFoundError, ValidationError } from '../../api/errors';
+import { AuthError, ConflictError, isNormalizedApiError, NotFoundError, ValidationError } from '../../api/errors';
+import { log } from '../../shared/logger';
 
 export type ApiErrorMessages = {
   validation?: string;
@@ -13,7 +14,7 @@ export function defineApiErrorMessages<T extends ApiErrorMessages>(messages: T):
   return messages;
 }
 
-export function mapApiError(error: unknown, messages: ApiErrorMessages): string {
+export function mapApiError(error: unknown, messages: ApiErrorMessages, correlationId?: string): string {
   if (messages.validation !== undefined && error instanceof ValidationError) {
     return messages.validation;
   }
@@ -30,6 +31,11 @@ export function mapApiError(error: unknown, messages: ApiErrorMessages): string 
     return messages.auth;
   }
 
-  console.warn(`[bot] ${messages.logContext}`, error);
+  log('warn', 'api_error_unmapped', {
+    ...(correlationId === undefined ? {} : { correlation_id: correlationId }),
+    context: messages.logContext,
+    error_name: error instanceof Error ? error.name : 'UnknownError',
+    ...(isNormalizedApiError(error) ? { error_code: error.code, status: error.status } : {}),
+  });
   return messages.fallback;
 }
