@@ -1,4 +1,5 @@
 {
+  "outputDirectory": "dist",
   "functions": {
     "api/webhook.ts": {
       "maxDuration": 10
