@@ -1,7 +1,14 @@
 import dotenv from 'dotenv';
+import type { Bot, Context } from 'grammy';
 
 import { buildSafeConfigSummary, ConfigValidationError, loadConfig, type AppConfig } from './config';
-import { createBot } from './bot/create-bot';
+import { createBot as defaultCreateBot } from './bot/create-bot';
+import {
+  resolveWebhookRuntimeConfig,
+  startWebhook as defaultStartWebhook,
+  type WebhookHandle,
+  type WebhookRuntimeConfig,
+} from './bot/webhook-entrypoint';
 
 export function start(rawEnv: NodeJS.ProcessEnv = process.env): AppConfig {
   const appConfig = loadConfig(rawEnv);
@@ -22,18 +29,33 @@ function handleStartupError(error: unknown): never {
   throw error;
 }
 
-function runBot(appConfig: AppConfig): void {
-  if (appConfig.BOT_MODE !== 'polling') {
-    console.warn(`BOT_MODE=${appConfig.BOT_MODE} is not implemented yet. Polling startup skipped.`);
-    return;
-  }
-
-  const bot = createBot(appConfig);
+function defaultStartPolling(bot: Bot<Context>): void {
   void bot.start({
     onStart: botInfo => {
       console.info(`Bot polling started for @${botInfo.username}`);
     },
   });
+}
+
+export type RunBotDependencies = {
+  createBot?: (config: AppConfig) => Bot<Context>;
+  startPolling?: (bot: Bot<Context>) => void;
+  startWebhook?: (bot: Bot<Context>, webhookConfig: WebhookRuntimeConfig) => Promise<WebhookHandle>;
+};
+
+export function runBot(appConfig: AppConfig, deps: RunBotDependencies = {}): void {
+  const create = deps.createBot ?? defaultCreateBot;
+  const bot = create(appConfig);
+
+  if (appConfig.BOT_MODE === 'polling') {
+    const startPolling = deps.startPolling ?? defaultStartPolling;
+    startPolling(bot);
+    return;
+  }
+
+  const startWebhook = deps.startWebhook ?? defaultStartWebhook;
+  const webhookConfig = resolveWebhookRuntimeConfig(appConfig);
+  void startWebhook(bot, webhookConfig);
 }
 
 if (require.main === module) {
