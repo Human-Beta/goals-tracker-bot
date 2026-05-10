@@ -34,31 +34,101 @@ const requiredUrl = (fieldName: string) =>
     }
   );
 
-const timeoutSchema = z
-  .string()
-  .optional()
-  .default('10000')
-  .transform((value, ctx) => {
-    const timeout = Number(value);
+const positiveIntSchema = (fieldName: string, defaultValue: string) =>
+  z
+    .string()
+    .optional()
+    .default(defaultValue)
+    .transform((value, ctx) => {
+      const parsed = Number(value);
 
-    if (!Number.isInteger(timeout) || timeout <= 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'HTTP_TIMEOUT_MS must be a positive integer',
-      });
-      return z.NEVER;
-    }
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${fieldName} must be a positive integer`,
+        });
+        return z.NEVER;
+      }
 
-    return timeout;
-  });
+      return parsed;
+    });
 
-export const EnvSchema = z.object({
+const optionalUrl = (fieldName: string) =>
+  z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      if (value === undefined || value.trim().length === 0) {
+        return undefined;
+      }
+
+      const trimmed = value.trim();
+      try {
+        new URL(trimmed);
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${fieldName} must be a valid URL`,
+        });
+        return z.NEVER;
+      }
+
+      return trimmed;
+    });
+
+const optionalPath = (fieldName: string) =>
+  z
+    .string()
+    .optional()
+    .transform((value, ctx) => {
+      if (value === undefined || value.trim().length === 0) {
+        return undefined;
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed.startsWith('/')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${fieldName} must start with "/"`,
+        });
+        return z.NEVER;
+      }
+
+      return trimmed;
+    });
+
+const BaseEnvSchema = z.object({
   TELEGRAM_BOT_TOKEN: requiredString('TELEGRAM_BOT_TOKEN'),
   GOALS_API_BASE_URL: requiredUrl('GOALS_API_BASE_URL'),
   GOALS_API_SERVICE_TOKEN: requiredString('GOALS_API_SERVICE_TOKEN'),
   LOG_LEVEL: z.enum(LOG_LEVEL_VALUES).optional().default('info'),
-  HTTP_TIMEOUT_MS: timeoutSchema,
+  HTTP_TIMEOUT_MS: positiveIntSchema('HTTP_TIMEOUT_MS', '10000'),
   BOT_MODE: z.enum(BOT_MODE_VALUES).optional().default('polling'),
+  BOT_WEBHOOK_PORT: positiveIntSchema('BOT_WEBHOOK_PORT', '8080'),
+  BOT_WEBHOOK_PUBLIC_URL: optionalUrl('BOT_WEBHOOK_PUBLIC_URL'),
+  BOT_WEBHOOK_SECRET_PATH: optionalPath('BOT_WEBHOOK_SECRET_PATH'),
+});
+
+export const EnvSchema = BaseEnvSchema.superRefine((data, ctx) => {
+  if (data.BOT_MODE !== 'webhook') {
+    return;
+  }
+
+  if (data.BOT_WEBHOOK_PUBLIC_URL === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['BOT_WEBHOOK_PUBLIC_URL'],
+      message: 'BOT_WEBHOOK_PUBLIC_URL is required when BOT_MODE=webhook',
+    });
+  }
+
+  if (data.BOT_WEBHOOK_SECRET_PATH === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['BOT_WEBHOOK_SECRET_PATH'],
+      message: 'BOT_WEBHOOK_SECRET_PATH is required when BOT_MODE=webhook',
+    });
+  }
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;
@@ -108,6 +178,9 @@ export type SafeConfigSummary = {
   LOG_LEVEL: AppConfig['LOG_LEVEL'];
   HTTP_TIMEOUT_MS: number;
   BOT_MODE: AppConfig['BOT_MODE'];
+  BOT_WEBHOOK_PORT: number;
+  BOT_WEBHOOK_PUBLIC_URL: string | null;
+  hasBotWebhookSecretPath: boolean;
   hasTelegramBotToken: boolean;
   hasGoalsApiServiceToken: boolean;
 };
@@ -118,6 +191,9 @@ export function buildSafeConfigSummary(config: AppConfig): SafeConfigSummary {
     LOG_LEVEL: config.LOG_LEVEL,
     HTTP_TIMEOUT_MS: config.HTTP_TIMEOUT_MS,
     BOT_MODE: config.BOT_MODE,
+    BOT_WEBHOOK_PORT: config.BOT_WEBHOOK_PORT,
+    BOT_WEBHOOK_PUBLIC_URL: config.BOT_WEBHOOK_PUBLIC_URL ?? null,
+    hasBotWebhookSecretPath: config.BOT_WEBHOOK_SECRET_PATH !== undefined,
     hasTelegramBotToken: config.TELEGRAM_BOT_TOKEN.length > 0,
     hasGoalsApiServiceToken: config.GOALS_API_SERVICE_TOKEN.length > 0,
   };

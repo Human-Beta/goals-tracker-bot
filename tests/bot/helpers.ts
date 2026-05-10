@@ -15,6 +15,9 @@ export const TEST_CONFIG: AppConfig = {
   LOG_LEVEL: 'info',
   HTTP_TIMEOUT_MS: 10000,
   BOT_MODE: 'polling',
+  BOT_WEBHOOK_PORT: 8080,
+  BOT_WEBHOOK_PUBLIC_URL: undefined,
+  BOT_WEBHOOK_SECRET_PATH: undefined,
 };
 
 export const GOAL_DETAILS_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
